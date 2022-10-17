@@ -31,26 +31,38 @@ data = data.drop(data.loc[:, ['date']], axis=1)
 # fill necessary NA
 data['media_type'] = data['media_type'].fillna('text')
 
-# extract emojis from messages
-def extract_emojis(row):
-    message = row.text
-    if message is None or type(message) != str:
-        return None
-    return ''.join(c for c in message if c in emoji.is_emoji['en'])
+# cleaning text
+data["text"] = data["text"].str.lower()
 
-data["emojis"] = data[["text"]].apply(extract_emojis, axis=1)
-print(data)
+# replace special characters with blank spaces
+data["text"] = data["text"].str.replace('[!?.:;,"()-+]', " ")
+
+# normalize polish characters
+data['text'] = (data['text'].astype("str")
+                .str.replace("ł", "l")
+                .str.replace("Ł", "L")
+                .str.normalize('NFKD')
+                .str.encode('ascii', errors='ignore')
+                .str.decode('utf-8'))
+
+#total number of messages
+sum_msg = data['text'].count()
+
+#who sent how many messages
+who_sent = data[['text','from']].groupby(['from']).count().sort_values(['text'], ascending=False)
+who_sent = who_sent.reset_index()
 
 # initialize the app
 app = dash.Dash(__name__)
 
-# app layout
-# app.layout = html.Div(
-#   children=[
-#      html.H1(children="Telegram analyzer",),
-#     html.P(
-#        children="Chat statistics"
-#       " between 2011 and 2020 ")])
+# layout
+app.layout = html.Div(
+    children=[
+        html.H1(children="Telegram analyzer", ),
+        html.P(
+            children="Chat statistics"
+                     " between 2011 and 2020 "),
+        html.P(children=sum_msg)])
 
 # run the app
 if __name__ == '__main__':
