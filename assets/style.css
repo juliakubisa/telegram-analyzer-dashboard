@@ -1,20 +1,54 @@
 .header-title {
   font-size: 48px;
+  font-family: 'Helvetica Neue', sans-serif;
+  font-weight: bold;
+  letter-spacing: 1px;
+  line-height: 1;
   text-align: center;
   padding: 10px;
   color: #FFFFFF;
   font-weight: bold;
 }
 
+
 .header {
-    background-color: #363636;
-    height: 200px;
+    background-color: #003f5c;
     display: flex;
     flex-direction: column;
     justify-content: center;
+    height: 200px;
+    width: 100%;
 }
 
 .header-description {
     text-align: center;
     color: #FFFFFF;
 }
+
+.stats {
+    height: 112px;
+    width: 920px;
+    display: flex;
+    justify-content: space-evenly;
+    padding-top: 30px;
+    margin: -30px auto 0 auto;
+    background-color: #FFFFFF;
+    box-shadow: 0 4px 6px 0 rgba(0, 0, 0, 0.18);
+}
+
+.stats-title {
+    margin-bottom: 6px;
+    margin-top: 2px;
+    font-weight: bold;
+    color: #dd5182;
+    text-align: center;
+}
+
+.stats-description {
+    font-weight: normal;
+    font-size: large;
+    text-align: center;
+
+}
+
+.pie-container

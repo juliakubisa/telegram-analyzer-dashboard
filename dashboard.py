@@ -1,6 +1,7 @@
 # import libraries
 import dash
 from dash import dcc, html
+import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output
 import pandas as pd
 import plotly.express as px
@@ -9,7 +10,7 @@ import re
 import numpy as np
 from nltk.tokenize import word_tokenize
 
-#connect to te main file
+# connect to te main file
 from app import app
 
 # load data
@@ -146,6 +147,7 @@ data['day_week_num'] = pd.to_datetime(data['datetime'], format='%H:%M').dt.dayof
 week = data[['text', 'day_week_num']].groupby(['day_week_num']).count()
 week = week.reset_index()
 
+
 def week_name(i):
     l = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     return l[i]
@@ -168,11 +170,13 @@ polish_stopwords = open("/Users/julkakubisa/PycharmProjects/telegram-analysis/da
 df2 = data[['text', 'from']]
 df2 = df2.reset_index()
 
+
 def tokenize(text):
     text_tokens = word_tokenize(text)
     tokens_processed = [j for j in text_tokens if j not in polish_stopwords and len(j) > 1]
     text = " ".join(tokens_processed)
     return text
+
 
 df2['tokenized'] = df2['text'].apply(tokenize)
 
@@ -183,18 +187,59 @@ splitted = " ".join(df2['tokenized']).split()
 cloud = WordCloud(background_color='white', max_font_size=150,
                   ).generate(df2['tokenized'].to_string())
 
-# layout
-app.layout = html.Div(
-    children=[
-        html.H1(
-            children="Telegram analyzer",
-            className= "header-title"),
-        html.P(
-            children="Chat statistics between 2011 and 2022",
-            className= "header-description"),
-    ],
+## LAYOUT
+
+# header
+header = dbc.Row([
+    html.H1(children="Telegram Analyzer", className="header-title"),
+    html.P(children="Date range x - x", className="header-description"),
+],
     className="header"
 )
+
+# statistics
+statistics = dbc.Row(
+    [
+        dbc.Col([
+            html.Div(children="Tot. messages", className="stats-title"),
+            html.P(children=sum_msg, className="stats-description"),
+        ]),
+        dbc.Col([
+            html.Div(children="Avg. messages/day", className="stats-title"),
+            html.P(children=avg_mess, className="stats-description"),
+        ]),
+        dbc.Col([
+            html.Div(children="Avg. words", className="stats-title"),
+            html.P(children="3.52", className="stats-description"),
+        ]),
+        dbc.Col([
+            html.Div(children="Most active day", className="stats-title"),
+            html.P(children=exact_day, className="stats-description"),
+        ]),
+    ],
+    className="stats"
+)
+
+# body
+body = dbc.Row(
+    [
+        dbc.Col([
+            dcc.Graph(figure=fig1),
+            dcc.Graph(figure=fig5),
+        ],
+        width=4),
+
+        dbc.Col([
+            dcc.Graph(figure=fig4),
+        ],
+        width=6)
+    ],
+    justify="center",
+    # className = "stats"
+)
+
+# layout
+app.layout = dbc.Container(fluid=True, children=[header, statistics, body])
 
 # run the app
 if __name__ == '__main__':
