@@ -12,7 +12,7 @@
 
 
 .header {
-    background-color: #003f5c;
+    background-color: #dd87ac;
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -51,4 +51,15 @@
 
 }
 
-.pie-container
+.pie-container {
+    margin: 30px;
+    background-color: #FFFFFF;
+    box-shadow: 0 4px 6px 0 rgba(0, 0, 0, 0.18);
+}
+
+.right-container {
+    margin: 30px;
+    padding-top: 30px;
+    background-color: #FFFFFF;
+    box-shadow: 0 4px 6px 0 rgba(0, 0, 0, 0.18);
+}
