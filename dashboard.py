@@ -67,7 +67,7 @@ fig1.update_layout(title={'x': 0.5},
                        y=1.1,
                        x=0.45,
                        orientation="h"),
-                   margin=dict(b=10)
+                   margin=dict(b=10),
                    )
 
 # what type of media was sent the most
@@ -121,7 +121,8 @@ exact_day = day[0].strftime("%d/%m/%Y")
 date_df_m = data.resample("M").apply({'text': 'count'})
 date_df_m.reset_index(inplace=True)
 
-fig3 = px.area(date_df_m, x="datetime", y="text", title="Number of messages per month",
+fig3 = px.area(date_df_m, x="datetime", y="text",
+               #title="Number of messages per month",
                color_discrete_sequence=px.colors.sequential.Magenta, labels={"datetime": "date", "text": "messages"},
                template="plotly_white")
 
@@ -135,7 +136,8 @@ data['hour'] = pd.to_datetime(data['datetime'], format='%H:%M').dt.hour
 hourly_distr = data[['text', 'hour']].groupby(['hour']).count().sort_values(['hour'], ascending=True)
 hourly_distr = hourly_distr.reset_index()
 
-fig4 = px.bar(hourly_distr, x='hour', y='text', title="Number of messages per hour",
+fig4 = px.bar(hourly_distr, x='hour', y='text',
+              #title="Number of messages per hour",
               labels={'text': 'messages'}, template="plotly_white", color='text',
               color_continuous_scale=px.colors.sequential.Magenta)
 
@@ -224,22 +226,35 @@ statistics = dbc.Row(
 body = dbc.Row(
     [
         dbc.Col([
-            dcc.Graph(figure=fig1),
-            dcc.Graph(figure=fig5),
+            dbc.Row(
+            dcc.Graph(figure=fig1)),
+            dbc.Row(
+            dcc.Graph(figure=fig5)),
         ],
-        width=4),
+        width=4,
+        className="pie-container"),
 
         dbc.Col([
-            dcc.Graph(figure=fig4),
+            html.Div([
+            html.H3(children="Number of messages per hour"),
+            dcc.Graph(figure=fig4)
+            ],),
+            html.H3(children= "Number of messsages per month"),
+            dcc.Graph(figure=fig3),
         ],
-        width=6)
+        width=6,
+        className="right-container")
     ],
     justify="center",
-    # className = "stats"
 )
 
+timeline = dbc.Row(
+    dcc.Graph(figure=fig2)
+)
+
+
 # layout
-app.layout = dbc.Container(fluid=True, children=[header, statistics, body])
+app.layout = dbc.Container(fluid=True, children=[header, statistics, body, timeline], style={'background-color': '#FFFFFF'})
 
 # run the app
 if __name__ == '__main__':
