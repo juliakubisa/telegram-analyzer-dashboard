@@ -1,5 +1,4 @@
 # import libraries
-import dash
 from dash import dcc, html
 import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output
@@ -9,6 +8,12 @@ from wordcloud import WordCloud
 import re
 import numpy as np
 from nltk.tokenize import word_tokenize
+from nltk import ngrams
+from collections import Counter
+import warnings
+
+pd.options.mode.chained_assignment = None
+warnings.simplefilter(action='ignore', category=FutureWarning)
 
 # connect to te main file
 from app import app
@@ -35,14 +40,11 @@ data = data.drop(data.loc[:, ['date']], axis=1)
 
 # fill necessary NA
 data['media_type'] = data['media_type'].fillna('text')
+data = data.dropna()
 
-# cleaning text
+# prepare text
 data["text"] = data["text"].str.lower()
-
-# replace special characters with blank spaces
 data["text"] = data["text"].str.replace('[!?.:;,"()-+]', " ")
-
-# normalize polish characters
 data['text'] = (data['text'].astype("str")
                 .str.replace("ł", "l")
                 .str.replace("Ł", "L")
@@ -66,7 +68,7 @@ fig1.update_layout(title={'x': 0.5},
                        yanchor="top",
                        xanchor="center",
                        y=1.1,
-                       #x=0.45,
+                       # x=0.45,
                        orientation="h"),
                    margin=dict(b=10),
                    )
@@ -97,7 +99,7 @@ for name in people:
     print(name, 'sent ', int(words_per_message), ' words, average ', round(words_per_message / user_data.shape[0], 2),
           ' words per message')
 
-# messages over days
+# chat timeline
 date_df = data.resample("D").apply({'text': 'count'})
 date_df.reset_index(inplace=True)
 
@@ -114,16 +116,15 @@ fig2.update_layout(title={'x': 0.5},
 sum_days = len(date_df.index)
 avg_mess = round(sum_msg / sum_days, 2)
 
-# day with the most messages
+# most active day
 day = date_df.max()
 exact_day = day[0].strftime("%d/%m/%Y")
 
-# messages over month
+# messages per month
 date_df_m = data.resample("M").apply({'text': 'count'})
 date_df_m.reset_index(inplace=True)
 
 fig3 = px.area(date_df_m, x="datetime", y="text",
-               #title="Number of messages per month",
                color_discrete_sequence=px.colors.sequential.Magenta, labels={"datetime": "date", "text": "messages"},
                template="plotly_white")
 
@@ -131,21 +132,20 @@ fig3.update_layout(title={'x': 0.5},
                    margin_b=60,
                    margin_r=30, )
 
-# busiest hour
+# messages per hour
 data['hour'] = pd.to_datetime(data['datetime'], format='%H:%M').dt.hour
 
 hourly_distr = data[['text', 'hour']].groupby(['hour']).count().sort_values(['hour'], ascending=True)
 hourly_distr = hourly_distr.reset_index()
 
 fig4 = px.bar(hourly_distr, x='hour', y='text',
-              #title="Number of messages per hour",
               labels={'text': 'messages'}, template="plotly_white", color='text',
               color_continuous_scale=px.colors.sequential.Magenta)
 
 fig4.update_layout(title={'x': 0.5},
                    margin=dict(b=60, r=30, t=80))
 
-# busiest day of the week
+# messages per week
 data['day_week_num'] = pd.to_datetime(data['datetime'], format='%H:%M').dt.dayofweek
 week = data[['text', 'day_week_num']].groupby(['day_week_num']).count()
 week = week.reset_index()
@@ -171,9 +171,9 @@ polish_stopwords = open("/Users/julkakubisa/PycharmProjects/telegram-analysis/da
 
 # new dataframe for text mining
 df2 = data[['text', 'from']]
-df2 = df2.reset_index()
 
 
+# tokenize
 def tokenize(text):
     text_tokens = word_tokenize(text)
     tokens_processed = [j for j in text_tokens if j not in polish_stopwords and len(j) > 1]
@@ -183,6 +183,7 @@ def tokenize(text):
 
 df2['tokenized'] = df2['text'].apply(tokenize)
 
+
 # split words
 splitted = " ".join(df2['tokenized']).split()
 
@@ -190,7 +191,21 @@ splitted = " ".join(df2['tokenized']).split()
 cloud = WordCloud(background_color='white', max_font_size=150,
                   ).generate(df2['tokenized'].to_string())
 
-## LAYOUT
+
+# ngrams
+def ngrams_df(num_grams, splitted):
+    all_grams = pd.DataFrame()
+
+    for i in range(1, num_grams + 1):
+        n_grams = ngrams(splitted, i)
+        ngrams_count = Counter(n_grams).most_common(10)
+        all_grams[i] = ngrams_count
+
+    return all_grams
+
+all_grams_df = ngrams_df(2, splitted)
+
+# LAYOUT
 
 # header
 header = dbc.Row([
@@ -229,9 +244,9 @@ body = dbc.Row(
         dbc.Col([
             dbc.Row([
                 html.Div([
-                html.I(className="bi bi-star-fill"), "  Messages distribution",
-                    ],
-                className = "graph-title"
+                    html.I(className="bi bi-star-fill"), "  Messages distribution",
+                ],
+                    className="graph-title"
                 ),
                 dcc.Graph(figure=fig1)
             ],
@@ -239,38 +254,38 @@ body = dbc.Row(
             dbc.Row([
                 html.Div([
                     html.I(className="bi bi-star-fill"), " Weekday distribution",
-                    ],
-                    className = "graph-title"
+                ],
+                    className="graph-title"
                 ),
                 dcc.Graph(figure=fig5)
-        ],
-        ),
             ],
-        width=4,
-        className="pie-container"),
+            ),
+        ],
+            width=4,
+            className="pie-container"),
 
         dbc.Col([
             html.Div([
                 html.Div([
-                html.I(className="bi bi-star-fill"), "  Messages per hour",
+                    html.I(className="bi bi-star-fill"), "  Messages per hour",
                 ],
-                className="graph-title"
-                ),
-            dcc.Graph(figure=fig4)
-            ],
-            className="right-container"),
-            html.Div([
-                html.Div([
-            html.I(className = "bi bi-star-fill")," Messages per month",
-                    ],
                     className="graph-title"
                 ),
-            dcc.Graph(figure=fig3)
+                dcc.Graph(figure=fig4)
             ],
-            className="right-container"
+                className="right-container"),
+            html.Div([
+                html.Div([
+                    html.I(className="bi bi-star-fill"), " Messages per month",
+                ],
+                    className="graph-title"
+                ),
+                dcc.Graph(figure=fig3)
+            ],
+                className="right-container"
             ),
         ],
-        width=6,
+            width=6,
         )
     ],
     justify="center",
@@ -278,16 +293,17 @@ body = dbc.Row(
 
 timeline = dbc.Row([
     html.Div([
-        html.I(className = "bi bi-star-fill"), " Chat timeline",
-        ],
+        html.I(className="bi bi-star-fill"), " Chat timeline",
+    ],
         className="graph-title-center"
     ),
     dcc.Graph(figure=fig2)
-    ],
+],
 )
 
 # layout
-app.layout = dbc.Container(fluid=True, children=[header, statistics, body, timeline], style={'background-color': '#FFFFFF'})
+app.layout = dbc.Container(fluid=True, children=[header, statistics, body, timeline, table],
+                           style={'background-color': '#FFFFFF'})
 
 # run the app
 if __name__ == '__main__':
