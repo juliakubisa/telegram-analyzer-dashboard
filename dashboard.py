@@ -57,15 +57,16 @@ sum_msg = data['text'].count()
 who_sent = data[['text', 'from']].groupby(['from']).count().sort_values(['text'], ascending=False)
 who_sent = who_sent.reset_index()
 
-fig1 = px.pie(who_sent, values='text', names='from', title="% of sent messages",
+fig1 = px.pie(who_sent, values='text', names='from',
               color_discrete_sequence=px.colors.sequential.Magenta, labels={'text': 'no. of texts'},
               )
 
 fig1.update_layout(title={'x': 0.5},
                    legend=dict(
                        yanchor="top",
+                       xanchor="center",
                        y=1.1,
-                       x=0.45,
+                       #x=0.45,
                        orientation="h"),
                    margin=dict(b=10),
                    )
@@ -100,7 +101,7 @@ for name in people:
 date_df = data.resample("D").apply({'text': 'count'})
 date_df.reset_index(inplace=True)
 
-fig2 = px.line(date_df, x="datetime", y="text", title="Chat timeline",
+fig2 = px.line(date_df, x="datetime", y="text",
                color_discrete_sequence=px.colors.sequential.Magenta,
                labels={"datetime": "date", "text": "messages"},
                template="plotly_white")
@@ -157,7 +158,7 @@ def week_name(i):
 
 week['day_week_num'] = week['day_week_num'].apply(week_name)
 
-fig5 = px.bar_polar(week, r="text", theta="day_week_num", title="Number of messages per weekday",
+fig5 = px.bar_polar(week, r="text", theta="day_week_num",
                     color="text", template="plotly_white", labels={'text': 'messages'},
                     color_continuous_scale=px.colors.sequential.Magenta)
 
@@ -226,32 +227,64 @@ statistics = dbc.Row(
 body = dbc.Row(
     [
         dbc.Col([
-            dbc.Row(
-            dcc.Graph(figure=fig1)),
-            dbc.Row(
-            dcc.Graph(figure=fig5)),
+            dbc.Row([
+                html.Div([
+                html.I(className="bi bi-star-fill"), "  Messages distribution",
+                    ],
+                className = "graph-title"
+                ),
+                dcc.Graph(figure=fig1)
+            ],
+            ),
+            dbc.Row([
+                html.Div([
+                    html.I(className="bi bi-star-fill"), " Weekday distribution",
+                    ],
+                    className = "graph-title"
+                ),
+                dcc.Graph(figure=fig5)
         ],
+        ),
+            ],
         width=4,
         className="pie-container"),
 
         dbc.Col([
             html.Div([
-            html.H3(children="Number of messages per hour"),
+                html.Div([
+                html.I(className="bi bi-star-fill"), "  Messages per hour",
+                ],
+                className="graph-title"
+                ),
             dcc.Graph(figure=fig4)
-            ],),
-            html.H3(children= "Number of messsages per month"),
-            dcc.Graph(figure=fig3),
+            ],
+            className="right-container"),
+            html.Div([
+                html.Div([
+            html.I(className = "bi bi-star-fill")," Messages per month",
+                    ],
+                    className="graph-title"
+                ),
+            dcc.Graph(figure=fig3)
+            ],
+            className="right-container"
+            ),
         ],
         width=6,
-        className="right-container")
+        )
     ],
     justify="center",
 )
 
-timeline = dbc.Row(
+timeline = dbc.Row([
+    html.Div([
+        html.I(className = "bi bi-star-fill"), " Chat timeline",
+        ],
+        className="graph-title-center"
+    ),
     dcc.Graph(figure=fig2)
+    ],
 )
-
 
 # layout
 app.layout = dbc.Container(fluid=True, children=[header, statistics, body, timeline], style={'background-color': '#FFFFFF'})
