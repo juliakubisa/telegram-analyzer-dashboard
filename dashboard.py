@@ -2,6 +2,7 @@
 from dash import dcc, html
 import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output
+import dash.dependencies as dd
 import pandas as pd
 import plotly.express as px
 from wordcloud import WordCloud
@@ -11,6 +12,7 @@ from nltk.tokenize import word_tokenize
 from nltk import ngrams
 from collections import Counter
 import warnings
+import emoji
 
 pd.options.mode.chained_assignment = None
 warnings.simplefilter(action='ignore', category=FutureWarning)
@@ -42,6 +44,24 @@ data = data.drop(data.loc[:, ['date']], axis=1)
 data['media_type'] = data['media_type'].fillna('text')
 data = data.dropna()
 
+#extract emojis from messages
+def extract_emojis(row):
+    message = row.text
+    if message is None or type(message) !=str:
+        return None
+    return ''.join(c for c in message if c in emoji.UNICODE_EMOJI['en'])
+
+data["emojis"] = data[["text"]].apply(extract_emojis, axis=1)
+total_emojis = list(filter(None, data['emojis']))
+emojis_count = Counter("".join(total_emojis)).most_common(5)
+emoji_df = pd.DataFrame(emojis_count, columns=['emoji', 'count'])
+
+
+fig_emoji = px.pie(emoji_df, hole=.4, values='count', names='emoji', color_discrete_sequence=px.colors.sequential.Magenta)
+fig_emoji.update_traces(textposition='inside', textinfo='percent+label')
+fig_emoji.update_layout(font = dict(size = 15))
+
+
 # prepare text
 data["text"] = data["text"].str.lower()
 data["text"] = data["text"].str.replace('[!?.:;,"()-+]', " ")
@@ -56,6 +76,7 @@ data['text'] = (data['text'].astype("str")
 sum_msg = data['text'].count()
 
 # messages distribution
+#TODO layout
 who_sent = data[['text', 'from']].groupby(['from']).count().sort_values(['text'], ascending=False)
 who_sent = who_sent.reset_index()
 
@@ -63,19 +84,21 @@ fig1 = px.pie(who_sent, values='text', names='from',
               color_discrete_sequence=px.colors.sequential.Magenta, labels={'text': 'no. of texts'},
               )
 
-fig1.update_layout(title={'x': 0.5},
-                   legend=dict(
-                       yanchor="top",
-                       xanchor="center",
-                       y=1.1,
-                       # x=0.45,
-                       orientation="h"),
-                   margin=dict(b=10),
-                   )
+fig1.update_layout(
+    showlegend=False,
+    font = dict(size = 15)
+)
+
+fig1.update_traces(textposition='inside', textinfo='percent+label')
+
 
 # what type of media was sent the most
 datatype = data[['media_type', 'datetime']].groupby(['media_type']).count().sort_values(['datetime'], ascending=False)
+datatype = datatype.reset_index()
+datatype = datatype.rename(columns={'media_type': 'media type', 'datetime': 'no. messsages'})
 
+#datatype.columns('media type', 'no. messages')
+#TODO find a way to show it in the dashboard
 
 # get the number of words in messages
 def word_count(row):
@@ -145,7 +168,7 @@ fig4 = px.bar(hourly_distr, x='hour', y='text',
 fig4.update_layout(title={'x': 0.5},
                    margin=dict(b=60, r=30, t=80))
 
-# messages per week
+# weekday distribution
 data['day_week_num'] = pd.to_datetime(data['datetime'], format='%H:%M').dt.dayofweek
 week = data[['text', 'day_week_num']].groupby(['day_week_num']).count()
 week = week.reset_index()
@@ -155,9 +178,9 @@ def week_name(i):
     l = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     return l[i]
 
-
 week['day_week_num'] = week['day_week_num'].apply(week_name)
 
+#TODO layout
 fig5 = px.bar_polar(week, r="text", theta="day_week_num",
                     color="text", template="plotly_white", labels={'text': 'messages'},
                     color_continuous_scale=px.colors.sequential.Magenta)
@@ -188,9 +211,10 @@ df2['tokenized'] = df2['text'].apply(tokenize)
 splitted = " ".join(df2['tokenized']).split()
 
 # wordcloud
-cloud = WordCloud(background_color='white', max_font_size=150,
-                  ).generate(df2['tokenized'].to_string())
+# cloud = WordCloud(background_color='white', max_font_size=150,
+#                   ).generate(df2['tokenized'].to_string())
 
+#TODO: show wordcloud
 
 # ngrams
 def ngrams_df(num_grams, splitted):
@@ -203,14 +227,15 @@ def ngrams_df(num_grams, splitted):
 
     return all_grams
 
-all_grams_df = ngrams_df(2, splitted)
+all_grams_df = ngrams_df(1, splitted)
+#TODO list of lists shown in a table
 
 # LAYOUT
 
 # header
 header = dbc.Row([
     html.H1(children="Telegram Analyzer", className="header-title"),
-    html.P(children="Date range x - x", className="header-description"),
+    html.P(children="Date range x - x", className="header-description"), #TODO actual date range
 ],
     className="header"
 )
@@ -238,6 +263,18 @@ statistics = dbc.Row(
     className="stats"
 )
 
+#timeline
+timeline = dbc.Row([
+    html.Div([
+        html.I(className="bi bi-star-fill"), " Chat timeline",
+    ],
+        className="graph-title-center"
+    ),
+    dcc.Graph(figure=fig2)
+],
+)
+
+
 # body
 body = dbc.Row(
     [
@@ -260,8 +297,19 @@ body = dbc.Row(
                 dcc.Graph(figure=fig5)
             ],
             ),
+            dbc.Row([
+                html.Div([
+                    html.I(className="bi bi-star-fill"), " Emoji distribution",
+                ],
+                    className="graph-title"
+                ),
+                dcc.Graph(figure=fig_emoji)
+                #TODO pick the number of emojis shown
+            ],
+            ),
         ],
-            width=4,
+            #width=3,
+            md=3,
             className="pie-container"),
 
         dbc.Col([
@@ -273,7 +321,8 @@ body = dbc.Row(
                 ),
                 dcc.Graph(figure=fig4)
             ],
-                className="right-container"),
+                className="right-container"
+            ),
             html.Div([
                 html.Div([
                     html.I(className="bi bi-star-fill"), " Messages per month",
@@ -284,26 +333,34 @@ body = dbc.Row(
             ],
                 className="right-container"
             ),
+
         ],
-            width=6,
-        )
+            #width=6,
+            md=5,
+        ),
+        dbc.Col([
+            html.Div([
+            dbc.Table.from_dataframe(datatype, index=False, className="table-hover", style={'text-align':'center'})
+                ],
+            ),
+           ],
+            #width=1,
+            md=2,
+       ),
+
     ],
     justify="center",
 )
 
-timeline = dbc.Row([
-    html.Div([
-        html.I(className="bi bi-star-fill"), " Chat timeline",
-    ],
-        className="graph-title-center"
-    ),
-    dcc.Graph(figure=fig2)
-],
-)
 
 # layout
-app.layout = dbc.Container(fluid=True, children=[header, statistics, body, timeline, table],
+app.layout = dbc.Container(fluid=True, children=[header, statistics, timeline, body],
                            style={'background-color': '#FFFFFF'})
+
+
+#callbacks
+
+
 
 # run the app
 if __name__ == '__main__':
