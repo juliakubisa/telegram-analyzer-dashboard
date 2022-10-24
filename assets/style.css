@@ -47,6 +47,7 @@
     font-weight: normal;
     font-size: large;
     text-align: center;
+    color: black;
 
 }
 
@@ -86,4 +87,9 @@
    font-size: large;
 }
 
+.table{
+    margin: 30px;
+    padding-top: 30px;
+    color: black;
+}
 
