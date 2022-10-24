@@ -87,9 +87,20 @@
    font-size: large;
 }
 
-.table{
-    margin: 30px;
+.table-style{
     padding-top: 30px;
     color: black;
+    text-align: center;
+    color: #dd5182;
+}
+
+.tables-container {
+    padding: 2%;
+    margin: 30px;
+    background-color: #FFFFFF;
+    box-shadow: 0 4px 6px 0 rgba(0, 0, 0, 0.18);
+    width: 100%;
+    display: flex;
+
 }
 

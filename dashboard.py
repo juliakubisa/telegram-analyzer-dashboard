@@ -5,6 +5,8 @@ from dash.dependencies import Input, Output
 import dash.dependencies as dd
 import pandas as pd
 import plotly.express as px
+from plotly.subplots import make_subplots
+import plotly.graph_objects as go
 from wordcloud import WordCloud
 import re
 import numpy as np
@@ -227,7 +229,29 @@ def ngrams_df(num_grams, splitted):
 
     return all_grams
 
-all_grams_df = ngrams_df(1, splitted)
+all_grams_df = ngrams_df(2, splitted)
+
+fig_ngrams = make_subplots(rows=2, cols=1)
+
+fig_ngrams.add_trace(go.Bar(
+    name = "Unigrams",
+    y=all_grams_df[1].str[0].astype('str'),
+    x=all_grams_df[1].str[1],
+    orientation='h'),
+    row=1, col=1)
+
+fig_ngrams.add_trace(go.Bar(
+    name = "Bigrams",
+    y=all_grams_df[2].str[0].astype('str'),
+    x=all_grams_df[2].str[1],
+    orientation='h'),
+    row=2, col=1)
+
+fig_ngrams.update_layout(height=750, xaxis_tickangle=45, title_text="Frequently used words", font_size=10, template = "plotly_white", barmode='stack')
+fig_ngrams.update_traces(textfont_size=8)
+
+fig_ngrams.show()
+
 #TODO list of lists shown in a table
 
 # LAYOUT
@@ -308,7 +332,6 @@ body = dbc.Row(
             ],
             ),
         ],
-            #width=3,
             md=3,
             className="pie-container"),
 
@@ -335,19 +358,20 @@ body = dbc.Row(
             ),
 
         ],
-            #width=6,
             md=5,
         ),
         dbc.Col([
             html.Div([
-            dbc.Table.from_dataframe(datatype, index=False, className="table-hover", style={'text-align':'center'})
+            dbc.Table.from_dataframe(datatype, hover=True, className="table-style", index=False)
                 ],
+                className='tables-container'
             ),
-           ],
-            #width=1,
-            md=2,
+            html.Div([
+                dcc.Graph(figure=fig_ngrams)
+                ])
+        ],
+            md=2
        ),
-
     ],
     justify="center",
 )
