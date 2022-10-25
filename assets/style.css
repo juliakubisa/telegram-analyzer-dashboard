@@ -15,7 +15,7 @@
     display: flex;
     flex-direction: column;
     justify-content: center;
-    height: 200px;
+    height: 250px;
     width: 100%;
 }
 
@@ -104,8 +104,44 @@
 
 .ngrams-container {
     margin: 30px;
+    padding-top: 30px;
     background-color: #FFFFFF;
     box-shadow: 0 4px 6px 0 rgba(0, 0, 0, 0.18);
     width: 100%;
 }
 
+
+.CalendarDay__selected,
+.CalendarDay__selected:active,
+.CalendarDay__selected:hover {
+  background: pink;
+  border: pink;
+  color: #fff
+}
+
+/* edit selected range */
+.CalendarDay__selected_span {
+  background: #dd5182;
+  border: #dd5182;
+  color: #fff
+}
+
+.DateInput_input {
+background-color: #dd87ac;
+color: white;
+border-color: white;
+}
+
+.DateRangePickerInput {
+background-color: #dd87ac;
+color: white;
+border-color: white;
+}
+
+.DateRangePickerInput_arrow {
+color: white;
+}
+
+.date-picker {
+text-align: center;
+}
