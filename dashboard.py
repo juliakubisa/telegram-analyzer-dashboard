@@ -235,6 +235,7 @@ fig_ngrams = make_subplots(rows=2, cols=1)
 
 fig_ngrams.add_trace(go.Bar(
     name = "Unigrams",
+    marker={'color': '#dd5182'},
     y=all_grams_df[1].str[0].astype('str'),
     x=all_grams_df[1].str[1],
     orientation='h'),
@@ -242,17 +243,29 @@ fig_ngrams.add_trace(go.Bar(
 
 fig_ngrams.add_trace(go.Bar(
     name = "Bigrams",
+    marker={'color': '#e9a9bd'},
     y=all_grams_df[2].str[0].astype('str'),
     x=all_grams_df[2].str[1],
     orientation='h'),
     row=2, col=1)
 
-fig_ngrams.update_layout(height=750, xaxis_tickangle=45, title_text="Frequently used words", font_size=10, template = "plotly_white", barmode='stack')
+fig_ngrams.update_layout(
+    height=750,
+    xaxis_tickangle=45,
+    font_size=10,
+    template="plotly_white",
+    legend=dict(
+    orientation="h",
+    yanchor="bottom",
+    y=1.02,
+    xanchor="right",
+    x=1
+)
+)
+
 fig_ngrams.update_traces(textfont_size=8)
 
-fig_ngrams.show()
-
-#TODO list of lists shown in a table
+#TODO
 
 # LAYOUT
 
@@ -368,7 +381,9 @@ body = dbc.Row(
             ),
             html.Div([
                 dcc.Graph(figure=fig_ngrams)
-                ])
+                ],
+                className='ngrams-container'
+            )
         ],
             md=2
        ),
