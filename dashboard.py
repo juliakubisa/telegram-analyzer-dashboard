@@ -121,8 +121,8 @@ people = data_wc['from'].unique()
 for name in people:
     user_data = data_wc[data_wc["from"] == name]
     words_per_message = np.sum(user_data['word_count'])
-    print(name, 'sent ', int(words_per_message), ' words, average ', round(words_per_message / user_data.shape[0], 2),
-          ' words per message')
+    #print(name, 'sent ', int(words_per_message), ' words, average ', round(words_per_message / user_data.shape[0], 2),
+    #    ' words per message')
 
 # chat timeline
 date_df = data.resample("D").apply({'text': 'count'})
@@ -263,6 +263,10 @@ fig_ngrams.update_layout(
 )
 )
 
+fig_ngrams.for_each_xaxis(lambda x: x.update(showgrid=False))
+fig_ngrams.for_each_yaxis(lambda x: x.update(showgrid=False))
+
+
 fig_ngrams.update_traces(textfont_size=8)
 
 #TODO
@@ -272,7 +276,19 @@ fig_ngrams.update_traces(textfont_size=8)
 # header
 header = dbc.Row([
     html.H1(children="Telegram Analyzer", className="header-title"),
-    html.P(children="Date range x - x", className="header-description"), #TODO actual date range
+    html.Div([
+    #html.P(children="Date range x - x", className="header-description"),
+    dcc.DatePickerRange(
+        id="date-range",
+        min_date_allowed=data.datetime.min().date(),
+        max_date_allowed=data.datetime.max().date(),
+        start_date=data.datetime.min().date(),
+        end_date=data.datetime.max().date(),
+        display_format='DD/MM/YYYY',
+    ),
+        ],
+        className= "date-picker"
+    ),
 ],
     className="header"
 )
@@ -380,10 +396,15 @@ body = dbc.Row(
                 className='tables-container'
             ),
             html.Div([
+                html.Div([
+                html.I(className="bi bi-star-fill"), " Messages per month",
+                    ],
+                    className="graph-title"
+                ),
                 dcc.Graph(figure=fig_ngrams)
                 ],
                 className='ngrams-container'
-            )
+            ),
         ],
             md=2
        ),
