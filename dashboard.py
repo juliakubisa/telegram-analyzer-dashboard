@@ -58,11 +58,9 @@ total_emojis = list(filter(None, data['emojis']))
 emojis_count = Counter("".join(total_emojis)).most_common(5)
 emoji_df = pd.DataFrame(emojis_count, columns=['emoji', 'count'])
 
-
 fig_emoji = px.pie(emoji_df, hole=.4, values='count', names='emoji', color_discrete_sequence=px.colors.sequential.Magenta)
 fig_emoji.update_traces(textposition='inside', textinfo='percent+label')
 fig_emoji.update_layout(font = dict(size = 15))
-
 
 # prepare text
 data["text"] = data["text"].str.lower()
@@ -109,7 +107,6 @@ def word_count(row):
         return None
     return re.sub("[^\w]", " ", message).split().__len__()
 
-
 # create a dataframe with word count
 data['word_count'] = data[['text']].apply(word_count, axis=1)
 data_wc = data[['from', 'word_count', 'datetime']].copy()
@@ -124,18 +121,9 @@ for name in people:
     #print(name, 'sent ', int(words_per_message), ' words, average ', round(words_per_message / user_data.shape[0], 2),
     #    ' words per message')
 
-# chat timeline
+# number of messages per day
 date_df = data.resample("D").apply({'text': 'count'})
 date_df.reset_index(inplace=True)
-
-fig2 = px.line(date_df, x="datetime", y="text",
-               color_discrete_sequence=px.colors.sequential.Magenta,
-               labels={"datetime": "date", "text": "messages"},
-               template="plotly_white")
-
-fig2.update_layout(title={'x': 0.5},
-                   margin_b=60,
-                   margin_r=30, )
 
 # average messages per day
 sum_days = len(date_df.index)
@@ -148,14 +136,6 @@ exact_day = day[0].strftime("%d/%m/%Y")
 # messages per month
 date_df_m = data.resample("M").apply({'text': 'count'})
 date_df_m.reset_index(inplace=True)
-
-fig3 = px.area(date_df_m, x="datetime", y="text",
-               color_discrete_sequence=px.colors.sequential.Magenta, labels={"datetime": "date", "text": "messages"},
-               template="plotly_white")
-
-fig3.update_layout(title={'x': 0.5},
-                   margin_b=60,
-                   margin_r=30, )
 
 # messages per hour
 data['hour'] = pd.to_datetime(data['datetime'], format='%H:%M').dt.hour
@@ -277,13 +257,13 @@ fig_ngrams.update_traces(textfont_size=8)
 header = dbc.Row([
     html.H1(children="Telegram Analyzer", className="header-title"),
     html.Div([
-    #html.P(children="Date range x - x", className="header-description"),
     dcc.DatePickerRange(
         id="date-range",
         min_date_allowed=data.datetime.min().date(),
         max_date_allowed=data.datetime.max().date(),
         start_date=data.datetime.min().date(),
         end_date=data.datetime.max().date(),
+        minimum_nights = 30, #TODO monthly distribution error
         display_format='DD/MM/YYYY',
     ),
         ],
@@ -323,7 +303,7 @@ timeline = dbc.Row([
     ],
         className="graph-title-center"
     ),
-    dcc.Graph(figure=fig2)
+    dcc.Graph(id="timeline_graph")
 ],
 )
 
@@ -381,7 +361,7 @@ body = dbc.Row(
                 ],
                     className="graph-title"
                 ),
-                dcc.Graph(figure=fig3)
+                dcc.Graph(id="monthly_distr")
             ],
                 className="right-container"
             ),
@@ -420,8 +400,62 @@ app.layout = dbc.Container(fluid=True, children=[header, statistics, timeline, b
 
 #callbacks
 
+#timeline
+@app.callback(
+    Output("timeline_graph", "figure"),
+    [
+        Input("date-range", "start_date"),
+        Input("date-range", "end_date"),
+    ],
+)
 
+def update_timeline(start_date, end_date):
+    mask = (
+        (date_df.datetime >= start_date)
+        & (date_df.datetime<= end_date)
+    )
+    filtered_data = date_df.loc[mask, :]
+    timeline_graph = px.line(filtered_data, x="datetime", y="text",
+                   color_discrete_sequence=px.colors.sequential.Magenta,
+                   labels={"datetime": "date", "text": "messages"},
+                   template="plotly_white")
+
+    timeline_graph.update_layout(title={'x': 0.5},
+                       margin_b=60,
+                       margin_r=30, )
+
+    return timeline_graph
+
+#monthly distribution
+@app.callback(
+    Output("monthly_distr", "figure"),
+    [
+        Input("date-range", "start_date"),
+        Input("date-range", "end_date"),
+    ],
+)
+
+
+def update_monthly(start_date, end_date):
+    mask = (
+        (date_df_m.datetime >= start_date)
+        & (date_df_m.datetime<= end_date)
+    )
+
+    filtered_data_m = date_df_m.loc[mask, :]
+    monthly_distr = px.area(filtered_data_m, x="datetime", y="text",
+                   color_discrete_sequence=px.colors.sequential.Magenta,
+                   labels={"datetime": "date", "text": "messages"},
+                   template="plotly_white")
+
+    monthly_distr.update_layout(title={'x': 0.5},
+                       margin_b=60,
+                       margin_r=30, )
+    return monthly_distr
+
+#TODO upload files
 
 # run the app
 if __name__ == '__main__':
     app.run_server(debug=True)
+
