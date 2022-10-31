@@ -53,7 +53,7 @@ fig_emoji = px.pie(emoji_df, hole=.4, values='count', names='emoji',
 fig_emoji.update_traces(textposition='inside', textinfo='percent+label')
 fig_emoji.update_layout(font=dict(size=15))
 
-# Prepare text 
+# Prepare text
 data["text"] = data["text"].str.lower()
 data["text"] = data["text"].str.replace('[!?.:;,"()-+]', " ")
 data['text'] = (data['text'].astype("str")
@@ -86,97 +86,25 @@ for name in people:
     # print(name, 'sent ', int(words_per_message), ' words, average ', round(words_per_message / user_data.shape[0], 2),
     #    ' words per message')
 
-# Weekday distribution
-data['day_week_num'] = pd.to_datetime(data['datetime'], format='%H:%M').dt.dayofweek        # Extracts the day of the week
-week = data[['text', 'day_week_num']].groupby(['day_week_num']).count().reset_index()
 
-def week_name(i):        # Creates a new list for naming days of the week
+# Creates a list for naming days of the week
+def week_name(i):
     l = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     return l[i]
-
-week['day_week_num'] = week['day_week_num'].apply(week_name)
-
-# Plot a day of the week figure
-fig5 = px.bar_polar(week, r="text", theta="day_week_num",
-                    color="text", template="plotly_white", labels={'text': 'messages'},
-                    color_continuous_scale=px.colors.sequential.Magenta)
-
-fig5.update_layout(title={'x': 0.5},
-                   margin=dict(b=60, r=30, t=80), polar=dict(radialaxis_showticklabels=False))
 
 ### Text mining
 # Import stopwords
 polish_stopwords = open("/Users/julkakubisa/PycharmProjects/telegram-analysis/data/polish.stopwords.txt",
                         "r").read().replace("\n'", " ").split()
 
-# Create a new dataframe for text mining
-df2 = data[['text', 'from']]
-
-# Tokenize
+# Tokenize function
 def tokenize(text):
     text_tokens = word_tokenize(text)
     tokens_processed = [j for j in text_tokens if j not in polish_stopwords and len(j) > 1]
     text = " ".join(tokens_processed)
     return text
 
-df2['tokenized'] = df2['text'].apply(tokenize)
-
-# Split words
-splitted = " ".join(df2['tokenized']).split()
-
-# wordcloud
 # TODO: wordcloud
-
-# Create N grams
-def ngrams_df(num_grams, splitted):
-    all_grams = pd.DataFrame()
-
-    for i in range(1, num_grams + 1):
-        n_grams = ngrams(splitted, i)
-        ngrams_count = Counter(n_grams).most_common(10)
-        all_grams[i] = ngrams_count
-
-    return all_grams
-
-
-all_grams_df = ngrams_df(2, splitted)
-
-# Create a figure of n-grams
-fig_ngrams = make_subplots(rows=2, cols=1)
-
-fig_ngrams.add_trace(go.Bar(
-    name="Unigrams",
-    marker={'color': '#dd5182'},
-    y=all_grams_df[1].str[0].astype('str'),
-    x=all_grams_df[1].str[1],
-    orientation='h'),
-    row=1, col=1)
-
-fig_ngrams.add_trace(go.Bar(
-    name="Bigrams",
-    marker={'color': '#e9a9bd'},
-    y=all_grams_df[2].str[0].astype('str'),
-    x=all_grams_df[2].str[1],
-    orientation='h'),
-    row=2, col=1)
-
-fig_ngrams.update_layout(
-    height=750,
-    xaxis_tickangle=45,
-    font_size=10,
-    template="plotly_white",
-    legend=dict(
-        orientation="h",
-        yanchor="bottom",
-        y=1.02,
-        xanchor="right",
-        x=1
-    )
-)
-
-fig_ngrams.for_each_xaxis(lambda x: x.update(showgrid=False))
-fig_ngrams.for_each_yaxis(lambda x: x.update(showgrid=False))
-fig_ngrams.update_traces(textfont_size=8)
 
 ### DASH LAYOUT
 header = dbc.Row([
@@ -251,7 +179,7 @@ body = dbc.Row(
                 ],
                     className="graph-title"
                 ),
-                dcc.Graph(figure=fig5)
+                dcc.Graph(id="week_distr")
             ],
             ),
             dbc.Row([
@@ -305,7 +233,7 @@ body = dbc.Row(
                 ],
                     className="graph-title"
                 ),
-                dcc.Graph(figure=fig_ngrams)
+                dcc.Graph(id="fig_ngrams")
             ],
                 className='ngrams-container'
             ),
@@ -320,7 +248,7 @@ body = dbc.Row(
 @app.callback(
     [Output("tot_mess", "children"), Output("avg_mess", "children"), Output("exact_day", "children"),
      Output("mess_distr", "figure"), Output("hour_distr", "figure"), Output("monthly_distr", "figure"),
-     Output("timeline_graph", "figure")],
+     Output("timeline_graph", "figure"), Output("week_distr", "figure"), Output("fig_ngrams", "figure")],
     [
         Input("date-range", "start_date"),
         Input("date-range", "end_date"),
@@ -339,7 +267,7 @@ def update_stats(start_date, end_date):
     date_df.reset_index(inplace=True)
 
     # Group messages by months
-    date_df_m = filtered_data.resample("M").apply({'text': 'count'}) #Messages counted by months
+    date_df_m = filtered_data.resample("M").apply({'text': 'count'})        # Messages counted by months
     date_df_m.reset_index(inplace=True)
 
     # Count messages by each author
@@ -398,8 +326,76 @@ def update_stats(start_date, end_date):
                                      margin_b=60,
                                      margin_r=30, )
 
+    # Weekday distribution
+    filtered_data['day_week_num'] = pd.to_datetime(filtered_data['datetime'], format='%H:%M').dt.dayofweek  # Extracts the day of the week
+    week = filtered_data[['text', 'day_week_num']].groupby(['day_week_num']).count().reset_index()
+    week['day_week_num'] = week['day_week_num'].apply(week_name)
 
-    return tot_mess, avg_mess, exact_day, mess_distr, hour_distr, monthly_distr, timeline_graph
+    # Plot a day of the week figure
+    week_distr = px.bar_polar(week, r="text", theta="day_week_num",
+                        color="text", template="plotly_white", labels={'text': 'messages'},
+                        color_continuous_scale=px.colors.sequential.Magenta)
+
+    week_distr.update_layout(title={'x': 0.5},
+                       margin=dict(b=60, r=30, t=80), polar=dict(radialaxis_showticklabels=False))
+
+    # Ngrams chart
+    df2 = filtered_data[['text', 'from']]
+    df2['tokenized'] = df2['text'].apply(tokenize)
+
+    # Split words
+    splitted = " ".join(df2['tokenized']).split()
+
+    def ngrams_df(num_grams, splitted):
+        all_grams = pd.DataFrame()
+
+        for i in range(1, num_grams + 1):
+            n_grams = ngrams(splitted, i)
+            ngrams_count = Counter(n_grams).most_common(10)
+            all_grams[i] = ngrams_count
+
+        return all_grams
+
+    all_grams_df = ngrams_df(2, splitted)
+
+    # Ngrams charts
+    fig_ngrams = make_subplots(rows=2, cols=1)
+
+    fig_ngrams.add_trace(go.Bar(
+        name="Unigrams",
+        marker={'color': '#dd5182'},
+        y=all_grams_df[1].str[0].astype('str'),
+        x=all_grams_df[1].str[1],
+        orientation='h'),
+        row=1, col=1)
+
+    fig_ngrams.add_trace(go.Bar(
+        name="Bigrams",
+        marker={'color': '#e9a9bd'},
+        y=all_grams_df[2].str[0].astype('str'),
+        x=all_grams_df[2].str[1],
+        orientation='h'),
+        row=2, col=1)
+
+    fig_ngrams.update_layout(
+        height=750,
+        xaxis_tickangle=45,
+        font_size=10,
+        template="plotly_white",
+        legend=dict(
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
+        )
+    )
+
+    fig_ngrams.for_each_xaxis(lambda x: x.update(showgrid=False))
+    fig_ngrams.for_each_yaxis(lambda x: x.update(showgrid=False))
+    fig_ngrams.update_traces(textfont_size=8)
+
+    return tot_mess, avg_mess, exact_day, mess_distr, hour_distr,\
+           monthly_distr, timeline_graph, week_distr, fig_ngrams
 
 # Create a layout
 app.layout = dbc.Container(fluid=True, children=[header, statistics, timeline, body],
