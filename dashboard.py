@@ -1,11 +1,10 @@
-# connect to te main file
+# Connect to te main file
 from app import app
 
-# import libraries
+# Import libraries
 from dash import dcc, html
 import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output
-import dash.dependencies as dd
 import pandas as pd
 import plotly.express as px
 from plotly.subplots import make_subplots
@@ -22,43 +21,39 @@ import emoji
 pd.options.mode.chained_assignment = None
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
-# load data
+# Load data
 data = pd.read_json("/Users/julkakubisa/PycharmProjects/telegram-analysis/data/mama_result.json")
 data = pd.json_normalize(data['messages'])
+data = data.filter(['text','from', 'media_type', 'date'], axis=1)       # leave only important columns
 
-# leave only important columns
-data = data.filter(['text','from', 'media_type', 'date'], axis=1)
-
-# convert date to datetime
+# Index messages by datetime
 data["datetime"] = pd.to_datetime(data['date'])
-
-# index messages by datetime
 data.index = data['datetime']
 data = data.drop(data.loc[:, ['date']], axis=1)
 
-# fill necessary NA
+# Fill necessary NA
 data['media_type'] = data['media_type'].fillna('text')
 data = data.dropna()
 
-# extract emojis from messages
+# Extract emojis from messages
 def extract_emojis(row):
     message = row.text
     if message is None or type(message) != str:
         return None
-    return ''.join(c for c in message if c in emoji.UNICODE_EMOJI['en'])
+    return ''.join(c for c in message if c in emoji.UNICODE_EMOJI['en'])        # Returns emojis that appeared in message
 
 data["emojis"] = data[["text"]].apply(extract_emojis, axis=1)
-total_emojis = list(filter(None, data['emojis']))
-emojis_count = Counter("".join(total_emojis)).most_common(5)
-emoji_df = pd.DataFrame(emojis_count, columns=['emoji', 'count'])
+total_emojis = list(filter(None, data['emojis']))       # Creates a list of each sequence of emojis used
+emojis_count = Counter("".join(total_emojis)).most_common(5)        # Counts individual appearances of emoji
+emoji_df = pd.DataFrame(emojis_count, columns=['emoji', 'count'])       # Creates a dataframe for emojis
 
-#figure
+# Plot an emoji figure
 fig_emoji = px.pie(emoji_df, hole=.4, values='count', names='emoji',
                    color_discrete_sequence=px.colors.sequential.Magenta)
 fig_emoji.update_traces(textposition='inside', textinfo='percent+label')
 fig_emoji.update_layout(font=dict(size=15))
 
-# prepare text
+# Prepare text 
 data["text"] = data["text"].str.lower()
 data["text"] = data["text"].str.replace('[!?.:;,"()-+]', " ")
 data['text'] = (data['text'].astype("str")
@@ -68,26 +63,22 @@ data['text'] = (data['text'].astype("str")
                 .str.encode('ascii', errors='ignore')
                 .str.decode('utf-8'))
 
-# what type of media was sent the most
-datatype = data[['media_type', 'datetime']].groupby(['media_type']).count().sort_values(['datetime'], ascending=False)
-datatype = datatype.reset_index()
+# Media types distribution
+datatype = data[['media_type', 'datetime']].groupby(['media_type']).count().sort_values(['datetime'],
+                                                                                        ascending=False).reset_index()
 datatype = datatype.rename(columns={'media_type': 'media type', 'datetime': 'no. messsages'})
 
-
-# get the number of words in messages
+# Gets the number of word per message
 def word_count(row):
     message = row.text
     if message is None or type(message) != str:
         return None
-    return re.sub("[^\w]", " ", message).split().__len__()
+    return re.sub("\W", " ", message).split().__len__()     # Splits by whole words that aren't [A-Za-z0-9_]
 
-# create a dataframe with word count
 data['word_count'] = data[['text']].apply(word_count, axis=1)
-data_wc = data[['from', 'word_count', 'datetime']].copy()
+data_wc = data[['from', 'word_count', 'datetime']].copy()       # Create a new dataframe for word count
 
-data = data.drop(['word_count'], axis=1)
-
-# number of words per message
+# Number of words per message
 people = data_wc['from'].unique()
 for name in people:
     user_data = data_wc[data_wc["from"] == name]
@@ -95,28 +86,17 @@ for name in people:
     # print(name, 'sent ', int(words_per_message), ' words, average ', round(words_per_message / user_data.shape[0], 2),
     #    ' words per message')
 
-# number of messages per day
-date_df = data.resample("D").apply({'text': 'count'})
-date_df.reset_index(inplace=True)
+# Weekday distribution
+data['day_week_num'] = pd.to_datetime(data['datetime'], format='%H:%M').dt.dayofweek        # Extracts the day of the week
+week = data[['text', 'day_week_num']].groupby(['day_week_num']).count().reset_index()
 
-# messages per month
-date_df_m = data.resample("M").apply({'text': 'count'})
-date_df_m.reset_index(inplace=True)
-
-# weekday distribution
-data['day_week_num'] = pd.to_datetime(data['datetime'], format='%H:%M').dt.dayofweek
-week = data[['text', 'day_week_num']].groupby(['day_week_num']).count()
-week = week.reset_index()
-
-
-def week_name(i):
+def week_name(i):        # Creates a new list for naming days of the week
     l = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     return l[i]
 
-
 week['day_week_num'] = week['day_week_num'].apply(week_name)
 
-# TODO layout
+# Plot a day of the week figure
 fig5 = px.bar_polar(week, r="text", theta="day_week_num",
                     color="text", template="plotly_white", labels={'text': 'messages'},
                     color_continuous_scale=px.colors.sequential.Magenta)
@@ -124,35 +104,30 @@ fig5 = px.bar_polar(week, r="text", theta="day_week_num",
 fig5.update_layout(title={'x': 0.5},
                    margin=dict(b=60, r=30, t=80), polar=dict(radialaxis_showticklabels=False))
 
-# text mining
+### Text mining
+# Import stopwords
 polish_stopwords = open("/Users/julkakubisa/PycharmProjects/telegram-analysis/data/polish.stopwords.txt",
                         "r").read().replace("\n'", " ").split()
 
-# new dataframe for text mining
+# Create a new dataframe for text mining
 df2 = data[['text', 'from']]
 
-
-# tokenize
+# Tokenize
 def tokenize(text):
     text_tokens = word_tokenize(text)
     tokens_processed = [j for j in text_tokens if j not in polish_stopwords and len(j) > 1]
     text = " ".join(tokens_processed)
     return text
 
-
 df2['tokenized'] = df2['text'].apply(tokenize)
 
-# split words
+# Split words
 splitted = " ".join(df2['tokenized']).split()
 
-
 # wordcloud
-# cloud = WordCloud(background_color='white', max_font_size=150,
-#                   ).generate(df2['tokenized'].to_string())
+# TODO: wordcloud
 
-# TODO: show wordcloud
-
-# ngrams
+# Create N grams
 def ngrams_df(num_grams, splitted):
     all_grams = pd.DataFrame()
 
@@ -166,6 +141,7 @@ def ngrams_df(num_grams, splitted):
 
 all_grams_df = ngrams_df(2, splitted)
 
+# Create a figure of n-grams
 fig_ngrams = make_subplots(rows=2, cols=1)
 
 fig_ngrams.add_trace(go.Bar(
@@ -201,11 +177,8 @@ fig_ngrams.update_layout(
 fig_ngrams.for_each_xaxis(lambda x: x.update(showgrid=False))
 fig_ngrams.for_each_yaxis(lambda x: x.update(showgrid=False))
 fig_ngrams.update_traces(textfont_size=8)
-# TODO
 
-# LAYOUT
-
-# header
+### DASH LAYOUT
 header = dbc.Row([
     html.H1(children="Telegram Analyzer", className="header-title"),
     html.Div([
@@ -225,7 +198,7 @@ header = dbc.Row([
     className="header"
 )
 
-# statistics
+
 statistics = dbc.Row(
     [
         dbc.Col([
@@ -248,7 +221,7 @@ statistics = dbc.Row(
     className="stats"
 )
 
-# timeline
+
 timeline = dbc.Row([
     html.Div([
         html.I(className="bi bi-star-fill"), " Chat timeline",
@@ -259,7 +232,7 @@ timeline = dbc.Row([
 ],
 )
 
-# body
+
 body = dbc.Row(
     [
         dbc.Col([
@@ -302,7 +275,7 @@ body = dbc.Row(
                 ],
                     className="graph-title"
                 ),
-                dcc.Graph(id="fig4")
+                dcc.Graph(id="hour_distr")
             ],
                 className="right-container"
             ),
@@ -343,10 +316,11 @@ body = dbc.Row(
     justify="center",
 )
 
-# callbacks
+### CALLBACKS
 @app.callback(
     [Output("tot_mess", "children"), Output("avg_mess", "children"), Output("exact_day", "children"),
-     Output("mess_distr", "figure"), Output("fig4", "figure"), Output("monthly_distr", "figure")],
+     Output("mess_distr", "figure"), Output("hour_distr", "figure"), Output("monthly_distr", "figure"),
+     Output("timeline_graph", "figure")],
     [
         Input("date-range", "start_date"),
         Input("date-range", "end_date"),
@@ -354,29 +328,37 @@ body = dbc.Row(
 )
 
 def update_stats(start_date, end_date):
-    mask = (
+    mask = (        # Range of dates for creating graphs
             (data.datetime >= start_date)
             & (data.datetime <= end_date)
     )
-    filtered_data = data.loc[mask, :]
+    filtered_data = data.loc[mask, :]       # Data filtered depending on chosen range
 
-    date_df = filtered_data.resample("D").apply({'text': 'count'}) #messages counted by days
+    # Group messages by days
+    date_df = filtered_data.resample("D").apply({'text': 'count'})
     date_df.reset_index(inplace=True)
 
-    who_sent = filtered_data[['text', 'from']].groupby(['from']).count().sort_values(['text'], ascending=False) #who sent how many
-    who_sent = who_sent.reset_index()
-
-    date_df_m = filtered_data.resample("M").apply({'text': 'count'}) #messages counted by months
+    # Group messages by months
+    date_df_m = filtered_data.resample("M").apply({'text': 'count'}) #Messages counted by months
     date_df_m.reset_index(inplace=True)
 
-    #statistics
-    tot_mess = filtered_data['text'].count() #total messages
-    sum_days = len(date_df.index) #total number of days
-    avg_mess = round(tot_mess / sum_days, 2) #average messages per day
-    day = date_df.max()
-    exact_day = day[0].strftime("%d/%m/%Y")
+    # Count messages by each author
+    who_sent = filtered_data[['text', 'from']].groupby(['from']).count().sort_values(['text'],
+                                                                                     ascending=False).reset_index()
 
-    #who sent chart
+    # Count messages by each hour
+    filtered_data['hour'] = pd.to_datetime(filtered_data['datetime'], format='%H:%M').dt.hour
+    hourly_distr = filtered_data[['text', 'hour']].groupby(['hour']).count().sort_values(['hour'],
+                                                                                         ascending=True).reset_index()
+
+    # Basic statistics
+    tot_mess = filtered_data['text'].count()        # Count the total number of messages
+    sum_days = len(date_df.index)       # Count the number of appearances by days
+    avg_mess = round(tot_mess / sum_days, 2)        # Average messages by day
+    day = date_df.max()
+    exact_day = day[0].strftime("%d/%m/%Y")     # Exact day with the most messages
+
+    # Messages distribution chart
     mess_distr = px.pie(who_sent, values='text', names='from',
                   color_discrete_sequence=px.colors.sequential.Magenta, labels={'text': 'no. of texts'},
                   )
@@ -388,18 +370,15 @@ def update_stats(start_date, end_date):
 
     mess_distr.update_traces(textposition='inside', textinfo='percent+label')
 
-    #hourly distribution
-    filtered_data['hour'] = pd.to_datetime(filtered_data['datetime'], format='%H:%M').dt.hour
-    hourly_distr = filtered_data[['text', 'hour']].groupby(['hour']).count().sort_values(['hour'], ascending=True)
-    hourly_distr = hourly_distr.reset_index()
-
-    fig4 = px.bar(hourly_distr, x='hour', y='text',
+    # Hourly distribution chart
+    hour_distr = px.bar(hourly_distr, x='hour', y='text',
                   labels={'text': 'messages'}, template="plotly_white", color='text',
                   color_continuous_scale=px.colors.sequential.Magenta)
 
-    fig4.update_layout(title={'x': 0.5},
+    hour_distr.update_layout(title={'x': 0.5},
                        margin=dict(b=60, r=30, t=80))
 
+    # Monthly distrubution chart
     monthly_distr = px.area(date_df_m, x="datetime", y="text",
                             color_discrete_sequence=px.colors.sequential.Magenta,
                             labels={"datetime": "date", "text": "messages"},
@@ -409,42 +388,26 @@ def update_stats(start_date, end_date):
                                 margin_b=60,
                                 margin_r=30, )
 
-
-    return tot_mess, avg_mess, exact_day, mess_distr, fig4, monthly_distr
-
-
-
-# timeline
-@app.callback(
-    Output("timeline_graph", "figure"),
-    [
-        Input("date-range", "start_date"),
-        Input("date-range", "end_date"),
-    ],
-)
-def update_timeline(start_date, end_date):
-    mask = (
-            (date_df.datetime >= start_date)
-            & (date_df.datetime <= end_date)
-    )
-    filtered_data = date_df.loc[mask, :]
-    timeline_graph = px.line(filtered_data, x="datetime", y="text",
-                             color_discrete_sequence=px.colors.sequential.Magenta,
-                             labels={"datetime": "date", "text": "messages"},
-                             template="plotly_white")
+    # Timeline chart
+    timeline_graph = px.line(date_df, x="datetime", y="text",
+                                 color_discrete_sequence=px.colors.sequential.Magenta,
+                                 labels={"datetime": "date", "text": "messages"},
+                                 template="plotly_white")
 
     timeline_graph.update_layout(title={'x': 0.5},
-                                 margin_b=60,
-                                 margin_r=30, )
+                                     margin_b=60,
+                                     margin_r=30, )
 
-    return timeline_graph
 
-# TODO upload files
+    return tot_mess, avg_mess, exact_day, mess_distr, hour_distr, monthly_distr, timeline_graph
 
-# layout
+# Create a layout
 app.layout = dbc.Container(fluid=True, children=[header, statistics, timeline, body],
                            style={'background-color': '#FFFFFF'})
 
-# run the app
+# Run the app
 if __name__ == '__main__':
     app.run_server(debug=True)
+
+
+# TODO upload files
