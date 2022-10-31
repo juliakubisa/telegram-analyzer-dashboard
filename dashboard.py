@@ -99,26 +99,9 @@ for name in people:
 date_df = data.resample("D").apply({'text': 'count'})
 date_df.reset_index(inplace=True)
 
-# most active day
-day = date_df.max()
-exact_day = day[0].strftime("%d/%m/%Y")
-
 # messages per month
 date_df_m = data.resample("M").apply({'text': 'count'})
 date_df_m.reset_index(inplace=True)
-
-# messages per hour
-data['hour'] = pd.to_datetime(data['datetime'], format='%H:%M').dt.hour
-
-hourly_distr = data[['text', 'hour']].groupby(['hour']).count().sort_values(['hour'], ascending=True)
-hourly_distr = hourly_distr.reset_index()
-
-fig4 = px.bar(hourly_distr, x='hour', y='text',
-              labels={'text': 'messages'}, template="plotly_white", color='text',
-              color_continuous_scale=px.colors.sequential.Magenta)
-
-fig4.update_layout(title={'x': 0.5},
-                   margin=dict(b=60, r=30, t=80))
 
 # weekday distribution
 data['day_week_num'] = pd.to_datetime(data['datetime'], format='%H:%M').dt.dayofweek
@@ -319,7 +302,7 @@ body = dbc.Row(
                 ],
                     className="graph-title"
                 ),
-                dcc.Graph(figure=fig4)
+                dcc.Graph(id="fig4")
             ],
                 className="right-container"
             ),
@@ -360,11 +343,10 @@ body = dbc.Row(
     justify="center",
 )
 
-
-# stats
+# callbacks
 @app.callback(
     [Output("tot_mess", "children"), Output("avg_mess", "children"), Output("exact_day", "children"),
-     Output("mess_distr", "figure")],
+     Output("mess_distr", "figure"), Output("fig4", "figure"), Output("monthly_distr", "figure")],
     [
         Input("date-range", "start_date"),
         Input("date-range", "end_date"),
@@ -377,11 +359,15 @@ def update_stats(start_date, end_date):
             & (data.datetime <= end_date)
     )
     filtered_data = data.loc[mask, :]
+
     date_df = filtered_data.resample("D").apply({'text': 'count'}) #messages counted by days
     date_df.reset_index(inplace=True)
 
     who_sent = filtered_data[['text', 'from']].groupby(['from']).count().sort_values(['text'], ascending=False) #who sent how many
     who_sent = who_sent.reset_index()
+
+    date_df_m = filtered_data.resample("M").apply({'text': 'count'}) #messages counted by months
+    date_df_m.reset_index(inplace=True)
 
     #statistics
     tot_mess = filtered_data['text'].count() #total messages
@@ -402,7 +388,30 @@ def update_stats(start_date, end_date):
 
     mess_distr.update_traces(textposition='inside', textinfo='percent+label')
 
-    return tot_mess, avg_mess, exact_day, mess_distr
+    #hourly distribution
+    filtered_data['hour'] = pd.to_datetime(filtered_data['datetime'], format='%H:%M').dt.hour
+    hourly_distr = filtered_data[['text', 'hour']].groupby(['hour']).count().sort_values(['hour'], ascending=True)
+    hourly_distr = hourly_distr.reset_index()
+
+    fig4 = px.bar(hourly_distr, x='hour', y='text',
+                  labels={'text': 'messages'}, template="plotly_white", color='text',
+                  color_continuous_scale=px.colors.sequential.Magenta)
+
+    fig4.update_layout(title={'x': 0.5},
+                       margin=dict(b=60, r=30, t=80))
+
+    monthly_distr = px.area(date_df_m, x="datetime", y="text",
+                            color_discrete_sequence=px.colors.sequential.Magenta,
+                            labels={"datetime": "date", "text": "messages"},
+                            template="plotly_white")
+
+    monthly_distr.update_layout(title={'x': 0.5},
+                                margin_b=60,
+                                margin_r=30, )
+
+
+    return tot_mess, avg_mess, exact_day, mess_distr, fig4, monthly_distr
+
 
 
 # timeline
@@ -429,33 +438,6 @@ def update_timeline(start_date, end_date):
                                  margin_r=30, )
 
     return timeline_graph
-
-
-# monthly distribution
-@app.callback(
-    Output("monthly_distr", "figure"),
-    [
-        Input("date-range", "start_date"),
-        Input("date-range", "end_date"),
-    ],
-)
-def update_monthly(start_date, end_date):
-    mask = (
-            (date_df_m.datetime >= start_date)
-            & (date_df_m.datetime <= end_date)
-    )
-
-    filtered_data_m = date_df_m.loc[mask, :]
-    monthly_distr = px.area(filtered_data_m, x="datetime", y="text",
-                            color_discrete_sequence=px.colors.sequential.Magenta,
-                            labels={"datetime": "date", "text": "messages"},
-                            template="plotly_white")
-
-    monthly_distr.update_layout(title={'x': 0.5},
-                                margin_b=60,
-                                margin_r=30, )
-    return monthly_distr
-
 
 # TODO upload files
 
