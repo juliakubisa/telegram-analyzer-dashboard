@@ -9,7 +9,6 @@ import pandas as pd
 import plotly.express as px
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
-from wordcloud import WordCloud
 import re
 import numpy as np
 from nltk.tokenize import word_tokenize
@@ -17,14 +16,13 @@ from nltk import ngrams
 from collections import Counter
 import warnings
 import emoji
-
 pd.options.mode.chained_assignment = None
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
 # Load data
 data = pd.read_json("/Users/julkakubisa/PycharmProjects/telegram-analysis/data/mama_result.json")
 data = pd.json_normalize(data['messages'])
-data = data.filter(['text','from', 'media_type', 'date'], axis=1)       # leave only important columns
+data = data.filter(['text','from', 'media_type', 'date'], axis=1)       # Leave only important columns
 
 # Index messages by datetime
 data["datetime"] = pd.to_datetime(data['date'])
@@ -53,6 +51,7 @@ fig_emoji = px.pie(emoji_df, hole=.4, values='count', names='emoji',
 fig_emoji.update_traces(textposition='inside', textinfo='percent+label')
 fig_emoji.update_layout(font=dict(size=15))
 
+
 # Prepare text
 data["text"] = data["text"].str.lower()
 data["text"] = data["text"].str.replace('[!?.:;,"()-+]', " ")
@@ -62,11 +61,6 @@ data['text'] = (data['text'].astype("str")
                 .str.normalize('NFKD')
                 .str.encode('ascii', errors='ignore')
                 .str.decode('utf-8'))
-
-# Media types distribution
-datatype = data[['media_type', 'datetime']].groupby(['media_type']).count().sort_values(['datetime'],
-                                                                                        ascending=False).reset_index()
-datatype = datatype.rename(columns={'media_type': 'media type', 'datetime': 'no. messsages'})
 
 # Gets the number of word per message
 def word_count(row):
@@ -103,8 +97,6 @@ def tokenize(text):
     tokens_processed = [j for j in text_tokens if j not in polish_stopwords and len(j) > 1]
     text = " ".join(tokens_processed)
     return text
-
-# TODO: wordcloud
 
 ### DASH LAYOUT
 header = dbc.Row([
@@ -223,7 +215,7 @@ body = dbc.Row(
         ),
         dbc.Col([
             html.Div([
-                dbc.Table.from_dataframe(datatype, hover=True, className="table-style", index=False)
+                html.Div(id="table_cont"),
             ],
                 className='tables-container'
             ),
@@ -248,7 +240,8 @@ body = dbc.Row(
 @app.callback(
     [Output("tot_mess", "children"), Output("avg_mess", "children"), Output("exact_day", "children"),
      Output("mess_distr", "figure"), Output("hour_distr", "figure"), Output("monthly_distr", "figure"),
-     Output("timeline_graph", "figure"), Output("week_distr", "figure"), Output("fig_ngrams", "figure")],
+     Output("timeline_graph", "figure"), Output("week_distr", "figure"), Output("fig_ngrams", "figure"),
+     Output("table_cont", "children")],
     [
         Input("date-range", "start_date"),
         Input("date-range", "end_date"),
@@ -306,7 +299,7 @@ def update_stats(start_date, end_date):
     hour_distr.update_layout(title={'x': 0.5},
                        margin=dict(b=60, r=30, t=80))
 
-    # Monthly distrubution chart
+    # Monthly distribution chart
     monthly_distr = px.area(date_df_m, x="datetime", y="text",
                             color_discrete_sequence=px.colors.sequential.Magenta,
                             labels={"datetime": "date", "text": "messages"},
@@ -326,12 +319,12 @@ def update_stats(start_date, end_date):
                                      margin_b=60,
                                      margin_r=30, )
 
-    # Weekday distribution
+    # Weekly distribution
     filtered_data['day_week_num'] = pd.to_datetime(filtered_data['datetime'], format='%H:%M').dt.dayofweek  # Extracts the day of the week
     week = filtered_data[['text', 'day_week_num']].groupby(['day_week_num']).count().reset_index()
     week['day_week_num'] = week['day_week_num'].apply(week_name)
 
-    # Plot a day of the week figure
+    # Weekly distribution chart
     week_distr = px.bar_polar(week, r="text", theta="day_week_num",
                         color="text", template="plotly_white", labels={'text': 'messages'},
                         color_continuous_scale=px.colors.sequential.Magenta)
@@ -394,8 +387,14 @@ def update_stats(start_date, end_date):
     fig_ngrams.for_each_yaxis(lambda x: x.update(showgrid=False))
     fig_ngrams.update_traces(textfont_size=8)
 
+    #Media type
+    datatype = filtered_data[['media_type', 'datetime']].groupby(['media_type']).count().sort_values(['datetime'],
+                                                                                                     ascending=False).reset_index()
+    datatype = datatype.rename(columns={'media_type': 'media type', 'datetime': 'no. messsages'})
+    table = dbc.Table.from_dataframe(datatype, hover=True, className="table-style", index=False)
+
     return tot_mess, avg_mess, exact_day, mess_distr, hour_distr,\
-           monthly_distr, timeline_graph, week_distr, fig_ngrams
+           monthly_distr, timeline_graph, week_distr, fig_ngrams, table
 
 # Create a layout
 app.layout = dbc.Container(fluid=True, children=[header, statistics, timeline, body],
