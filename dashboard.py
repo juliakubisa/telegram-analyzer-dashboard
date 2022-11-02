@@ -1,14 +1,16 @@
 # Connect to te main file
 from app import app
 
-# Import libraries
+# Libraries for dash front-end
 from dash import dcc, html
 import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output
-import pandas as pd
 import plotly.express as px
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
+
+# Libraries for the data analysis
+import pandas as pd
 import re
 import numpy as np
 from nltk.tokenize import word_tokenize
@@ -16,6 +18,8 @@ from nltk import ngrams
 from collections import Counter
 import warnings
 import emoji
+
+# Exclude warnings
 pd.options.mode.chained_assignment = None
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
@@ -69,18 +73,6 @@ def word_count(row):
         return None
     return re.sub("\W", " ", message).split().__len__()     # Splits by whole words that aren't [A-Za-z0-9_]
 
-data['word_count'] = data[['text']].apply(word_count, axis=1)
-data_wc = data[['from', 'word_count', 'datetime']].copy()       # Create a new dataframe for word count
-
-# Number of words per message
-people = data_wc['from'].unique()
-for name in people:
-    user_data = data_wc[data_wc["from"] == name]
-    words_per_message = np.sum(user_data['word_count'])
-    # print(name, 'sent ', int(words_per_message), ' words, average ', round(words_per_message / user_data.shape[0], 2),
-    #    ' words per message')
-
-
 # Creates a list for naming days of the week
 def week_name(i):
     l = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
@@ -101,6 +93,11 @@ def tokenize(text):
 ### DASH LAYOUT
 header = dbc.Row([
     html.H1(children="Telegram Analyzer", className="header-title"),
+    dcc.Upload([
+        'Drag and Drop or ',
+        html.A('Select a File')
+    ], className="upload"
+    ),
     html.Div([
         dcc.DatePickerRange(
             id="date-range",
@@ -238,10 +235,10 @@ body = dbc.Row(
 
 ### CALLBACKS
 @app.callback(
-    [Output("tot_mess", "children"), Output("avg_mess", "children"), Output("exact_day", "children"),
-     Output("mess_distr", "figure"), Output("hour_distr", "figure"), Output("monthly_distr", "figure"),
-     Output("timeline_graph", "figure"), Output("week_distr", "figure"), Output("fig_ngrams", "figure"),
-     Output("table_cont", "children")],
+    [Output("tot_mess", "children"), Output("avg_mess", "children"), Output("avg_words", "children"),
+     Output("exact_day", "children"), Output("mess_distr", "figure"), Output("hour_distr", "figure"),
+     Output("monthly_distr", "figure"), Output("timeline_graph", "figure"), Output("week_distr", "figure"),
+     Output("fig_ngrams", "figure"), Output("table_cont", "children")],
     [
         Input("date-range", "start_date"),
         Input("date-range", "end_date"),
@@ -267,6 +264,9 @@ def update_stats(start_date, end_date):
     who_sent = filtered_data[['text', 'from']].groupby(['from']).count().sort_values(['text'],
                                                                                      ascending=False).reset_index()
 
+    # Apply number of words for each message
+    filtered_data['word_count'] = filtered_data[['text']].apply(word_count, axis=1)
+
     # Count messages by each hour
     filtered_data['hour'] = pd.to_datetime(filtered_data['datetime'], format='%H:%M').dt.hour
     hourly_distr = filtered_data[['text', 'hour']].groupby(['hour']).count().sort_values(['hour'],
@@ -276,6 +276,7 @@ def update_stats(start_date, end_date):
     tot_mess = filtered_data['text'].count()        # Count the total number of messages
     sum_days = len(date_df.index)       # Count the number of appearances by days
     avg_mess = round(tot_mess / sum_days, 2)        # Average messages by day
+    avg_words = round(sum(filtered_data['word_count'])/len(data.index), 2)  # Average words per message
     day = date_df.max()
     exact_day = day[0].strftime("%d/%m/%Y")     # Exact day with the most messages
 
@@ -393,12 +394,13 @@ def update_stats(start_date, end_date):
     datatype = datatype.rename(columns={'media_type': 'media type', 'datetime': 'no. messsages'})
     table = dbc.Table.from_dataframe(datatype, hover=True, className="table-style", index=False)
 
-    return tot_mess, avg_mess, exact_day, mess_distr, hour_distr,\
+    return tot_mess, avg_mess, avg_words, exact_day, mess_distr, hour_distr,\
            monthly_distr, timeline_graph, week_distr, fig_ngrams, table
 
 # Create a layout
 app.layout = dbc.Container(fluid=True, children=[header, statistics, timeline, body],
-                           style={'background-color': '#FFFFFF'})
+                           style={'background-color': '#FFFFFF'}
+)
 
 # Run the app
 if __name__ == '__main__':
