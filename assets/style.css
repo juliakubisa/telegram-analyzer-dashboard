@@ -1,3 +1,12 @@
+.container {
+    background-color: #FFFFFF;
+    fluid= True;
+    position: absolute;
+    width: 100%;
+    left: 0;
+    right: 0;
+}
+
 .header-title {
   font-size: 48px;
   font-family: 'Helvetica Neue', sans-serif;
@@ -15,7 +24,7 @@
     display: flex;
     flex-direction: column;
     justify-content: center;
-    height: 250px;
+    height: 350px;
     width: 100%;
 }
 
@@ -29,6 +38,7 @@
     width: 920px;
     display: flex;
     justify-content: space-evenly;
+    justify: center;
     padding-top: 30px;
     margin: -30px auto 0 auto;
     background-color: #FFFFFF;
@@ -138,10 +148,22 @@ color: white;
 border-color: white;
 }
 
-.DateRangePickerInput_arrow {
-color: white;
-}
-
 .date-picker {
 text-align: center;
+}
+
+.DateRangePickerInput_arrow_svg {
+fill: #ffffff;
+}
+
+.upload {
+height: 60px;
+line-height: 60px;
+margin: 20px;
+border-width: 1px;
+border-style: dashed;
+border-radius: 5px;
+text-align: center;
+justify: center;
+color: white
 }
