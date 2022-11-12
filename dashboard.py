@@ -1,13 +1,18 @@
 # Connect to te main file
+import base64
+import io
+
 from app import app
 
 # Libraries for dash front-end
 from dash import dcc, html
 import dash_bootstrap_components as dbc
-from dash.dependencies import Input, Output
+from dash.dependencies import Input, Output, State
 import plotly.express as px
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
+from dash.exceptions import PreventUpdate
+
 
 # Libraries for the data analysis
 import pandas as pd
@@ -23,19 +28,25 @@ import emoji
 pd.options.mode.chained_assignment = None
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
-# Load data
-data = pd.read_json("/Users/julkakubisa/PycharmProjects/telegram-analysis/data/mama_result.json")
-data = pd.json_normalize(data['messages'])
-data = data.filter(['text','from', 'media_type', 'date'], axis=1)       # Leave only important columns
+# Import stopwords
+polish_stopwords = open("/Users/julkakubisa/PycharmProjects/telegram-analysis/data/polish.stopwords.txt",
+                        "r").read().replace("\n'", " ").split()
 
-# Index messages by datetime
-data["datetime"] = pd.to_datetime(data['date'])
-data.index = data['datetime']
-data = data.drop(data.loc[:, ['date']], axis=1)
+# Reads and prepares data
+def prepare_data(data):
+    data = pd.read_json(data, orient='split')
+    data = pd.json_normalize(data['messages'])
+    data = data.filter(['text','from', 'media_type', 'date'], axis=1)       # Leave only important columns
 
-# Fill necessary NA
-data['media_type'] = data['media_type'].fillna('text')
-data = data.dropna()
+    # Index messages by datetime
+    data["datetime"] = pd.to_datetime(data['date'])
+    data.index = data['datetime']
+    data = data.drop(data.loc[:, ['date']], axis=1)
+
+    # Fill necessary NA
+    data['media_type'] = data['media_type'].fillna('text')
+    data = data.dropna()
+    return data
 
 # Extract emojis from messages
 def extract_emojis(row):
@@ -44,27 +55,19 @@ def extract_emojis(row):
         return None
     return ''.join(c for c in message if c in emoji.UNICODE_EMOJI['en'])        # Returns emojis that appeared in message
 
-data["emojis"] = data[["text"]].apply(extract_emojis, axis=1)
-total_emojis = list(filter(None, data['emojis']))       # Creates a list of each sequence of emojis used
-emojis_count = Counter("".join(total_emojis)).most_common(5)        # Counts individual appearances of emoji
-emoji_df = pd.DataFrame(emojis_count, columns=['emoji', 'count'])       # Creates a dataframe for emojis
 
-# Plot an emoji figure
-fig_emoji = px.pie(emoji_df, hole=.4, values='count', names='emoji',
-                   color_discrete_sequence=px.colors.sequential.Magenta)
-fig_emoji.update_traces(textposition='inside', textinfo='percent+label')
-fig_emoji.update_layout(font=dict(size=15))
-
-
-# Prepare text
-data["text"] = data["text"].str.lower()
-data["text"] = data["text"].str.replace('[!?.:;,"()-+]', " ")
-data['text'] = (data['text'].astype("str")
-                .str.replace("ł", "l")
-                .str.replace("Ł", "L")
-                .str.normalize('NFKD')
-                .str.encode('ascii', errors='ignore')
-                .str.decode('utf-8'))
+# Prepares text for further analysis
+def prepare_text(data):
+    # Prepare text
+    data["text"] = data["text"].str.lower()
+    data["text"] = data["text"].str.replace('[!?.:;,"()-+]', " ")
+    data['text'] = (data['text'].astype("str")
+                    .str.replace("ł", "l")
+                    .str.replace("Ł", "L")
+                    .str.normalize('NFKD')
+                    .str.encode('ascii', errors='ignore')
+                    .str.decode('utf-8'))
+    return data
 
 # Gets the number of word per message
 def word_count(row):
@@ -77,11 +80,6 @@ def word_count(row):
 def week_name(i):
     l = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     return l[i]
-
-### Text mining
-# Import stopwords
-polish_stopwords = open("/Users/julkakubisa/PycharmProjects/telegram-analysis/data/polish.stopwords.txt",
-                        "r").read().replace("\n'", " ").split()
 
 # Tokenize function
 def tokenize(text):
@@ -96,21 +94,23 @@ header = dbc.Row([
     dcc.Upload([
         'Drag and Drop or ',
         html.A('Select a File')
-    ], className="upload"
+    ], className="upload",
+        id='upload-data',
     ),
-    html.Div([
-        dcc.DatePickerRange(
-            id="date-range",
-            min_date_allowed=data.datetime.min().date(),
-            max_date_allowed=data.datetime.max().date(),
-            start_date=data.datetime.min().date(),
-            end_date=data.datetime.max().date(),
-            minimum_nights=30,  # TODO monthly distribution error
-            display_format='DD/MM/YYYY',
-        ),
-    ],
-        className="date-picker"
-    ),
+    dcc.Store(id='store'),
+    # html.Div([
+    #     dcc.DatePickerRange(
+    #         id="date-range",
+    #         # min_date_allowed=filtered_data.datetime.min().date(),
+    #         # max_date_allowed=filtered_data.datetime.max().date(),
+    #         # start_date=filtered_data.datetime.min().date(),
+    #         # end_date=filtered_data.datetime.max().date(),
+    #         minimum_nights=30,  # TODO monthly distribution error
+    #         display_format='DD/MM/YYYY',
+    #     ),
+    # ],
+    #     className="date-picker"
+    # ),
 ],
     className="header"
 )
@@ -177,7 +177,7 @@ body = dbc.Row(
                 ],
                     className="graph-title"
                 ),
-                dcc.Graph(figure=fig_emoji)
+                dcc.Graph(id="fig_emoji")
                 # TODO pick the number of emojis shown
             ],
             ),
@@ -233,50 +233,96 @@ body = dbc.Row(
     justify="center",
 )
 
+
 ### CALLBACKS
+@app.callback(
+    Output('store', 'data'),
+    Input('upload-data', 'contents'),
+    prevent_initial_call=True)
+
+def update_output(contents):
+    content_string = contents.split(',')
+
+    decoded = base64.b64decode(content_string[1])
+    try:
+            df = pd.read_json(io.BytesIO(decoded))
+    except Exception as e:
+        print(e)
+        return html.Div([
+            'There was an error processing this file.'
+        ])
+    df = df.to_json(orient='split')
+    return df
+
+
 @app.callback(
     [Output("tot_mess", "children"), Output("avg_mess", "children"), Output("avg_words", "children"),
      Output("exact_day", "children"), Output("mess_distr", "figure"), Output("hour_distr", "figure"),
      Output("monthly_distr", "figure"), Output("timeline_graph", "figure"), Output("week_distr", "figure"),
-     Output("fig_ngrams", "figure"), Output("table_cont", "children")],
+     Output("fig_ngrams", "figure"), Output("table_cont", "children"), Output("fig_emoji", "figure")],
     [
-        Input("date-range", "start_date"),
-        Input("date-range", "end_date"),
+        # Input("date-range", "start_date"),
+        # Input("date-range", "end_date"),
+        Input('store', 'data'),
     ],
 )
+# def update_stats(start_date, end_date, data):
+def update_states(data):
+    if data is None:
+        raise PreventUpdate
 
-def update_stats(start_date, end_date):
-    mask = (        # Range of dates for creating graphs
-            (data.datetime >= start_date)
-            & (data.datetime <= end_date)
-    )
-    filtered_data = data.loc[mask, :]       # Data filtered depending on chosen range
+    # Upload and define data
+    data = prepare_data(data)
+
+    # Emojis
+    data["emojis"] = data[["text"]].apply(extract_emojis, axis=1)
+    total_emojis = list(filter(None, data['emojis']))  # Creates a list of each sequence of emojis used
+    emojis_count = Counter("".join(total_emojis)).most_common(5)  # Counts individual appearances of emoji
+    emoji_df = pd.DataFrame(emojis_count, columns=['emoji', 'count'])  # Creates a dataframe for emojis
+
+    # Plot an emoji figure
+    fig_emoji = px.pie(emoji_df, hole=.4, values='count', names='emoji',
+                       color_discrete_sequence=px.colors.sequential.Magenta)
+    fig_emoji.update_traces(textposition='inside', textinfo='percent+label')
+    fig_emoji.update_layout(font=dict(size=15))
+
+    # Prepare text
+    data = prepare_text(data)
+
+    #
+    # mask = (        # Range of dates for creating graphs
+    #         (data.datetime >= start_date)
+    #         & (data.datetime <= end_date)
+    # )
+    #
+
+    # filtered_data = data.loc[mask, :]       # Data filtered depending on chosen range
 
     # Group messages by days
-    date_df = filtered_data.resample("D").apply({'text': 'count'})
+    date_df = data.resample("D").apply({'text': 'count'})
     date_df.reset_index(inplace=True)
 
     # Group messages by months
-    date_df_m = filtered_data.resample("M").apply({'text': 'count'})        # Messages counted by months
+    date_df_m = data.resample("M").apply({'text': 'count'})        # Messages counted by months
     date_df_m.reset_index(inplace=True)
 
     # Count messages by each author
-    who_sent = filtered_data[['text', 'from']].groupby(['from']).count().sort_values(['text'],
+    who_sent = data[['text', 'from']].groupby(['from']).count().sort_values(['text'],
                                                                                      ascending=False).reset_index()
 
     # Apply number of words for each message
-    filtered_data['word_count'] = filtered_data[['text']].apply(word_count, axis=1)
+    data['word_count'] = data[['text']].apply(word_count, axis=1)
 
     # Count messages by each hour
-    filtered_data['hour'] = pd.to_datetime(filtered_data['datetime'], format='%H:%M').dt.hour
-    hourly_distr = filtered_data[['text', 'hour']].groupby(['hour']).count().sort_values(['hour'],
+    data['hour'] = pd.to_datetime(data['datetime'], format='%H:%M').dt.hour
+    hourly_distr = data[['text', 'hour']].groupby(['hour']).count().sort_values(['hour'],
                                                                                          ascending=True).reset_index()
 
     # Basic statistics
-    tot_mess = filtered_data['text'].count()        # Count the total number of messages
+    tot_mess = data['text'].count()        # Count the total number of messages
     sum_days = len(date_df.index)       # Count the number of appearances by days
     avg_mess = round(tot_mess / sum_days, 2)        # Average messages by day
-    avg_words = round(sum(filtered_data['word_count'])/len(data.index), 2)  # Average words per message
+    avg_words = round(sum(data['word_count'])/len(data.index), 2)  # Average words per message
     day = date_df.max()
     exact_day = day[0].strftime("%d/%m/%Y")     # Exact day with the most messages
 
@@ -321,8 +367,8 @@ def update_stats(start_date, end_date):
                                      margin_r=30, )
 
     # Weekly distribution
-    filtered_data['day_week_num'] = pd.to_datetime(filtered_data['datetime'], format='%H:%M').dt.dayofweek  # Extracts the day of the week
-    week = filtered_data[['text', 'day_week_num']].groupby(['day_week_num']).count().reset_index()
+    data['day_week_num'] = pd.to_datetime(data['datetime'], format='%H:%M').dt.dayofweek  # Extracts the day of the week
+    week = data[['text', 'day_week_num']].groupby(['day_week_num']).count().reset_index()
     week['day_week_num'] = week['day_week_num'].apply(week_name)
 
     # Weekly distribution chart
@@ -334,7 +380,7 @@ def update_stats(start_date, end_date):
                        margin=dict(b=60, r=30, t=80), polar=dict(radialaxis_showticklabels=False))
 
     # Ngrams chart
-    df2 = filtered_data[['text', 'from']]
+    df2 = data[['text', 'from']]
     df2['tokenized'] = df2['text'].apply(tokenize)
 
     # Split words
@@ -389,13 +435,13 @@ def update_stats(start_date, end_date):
     fig_ngrams.update_traces(textfont_size=8)
 
     #Media type
-    datatype = filtered_data[['media_type', 'datetime']].groupby(['media_type']).count().sort_values(['datetime'],
+    datatype = data[['media_type', 'datetime']].groupby(['media_type']).count().sort_values(['datetime'],
                                                                                                      ascending=False).reset_index()
     datatype = datatype.rename(columns={'media_type': 'media type', 'datetime': 'no. messsages'})
     table = dbc.Table.from_dataframe(datatype, hover=True, className="table-style", index=False)
 
     return tot_mess, avg_mess, avg_words, exact_day, mess_distr, hour_distr,\
-           monthly_distr, timeline_graph, week_distr, fig_ngrams, table
+           monthly_distr, timeline_graph, week_distr, fig_ngrams, table, fig_emoji
 
 # Create a layout
 app.layout = dbc.Container(fluid=True, children=[header, statistics, timeline, body],
@@ -405,6 +451,3 @@ app.layout = dbc.Container(fluid=True, children=[header, statistics, timeline, b
 # Run the app
 if __name__ == '__main__':
     app.run_server(debug=True)
-
-
-# TODO upload files
