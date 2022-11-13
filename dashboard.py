@@ -13,7 +13,6 @@ from plotly.subplots import make_subplots
 import plotly.graph_objects as go
 from dash.exceptions import PreventUpdate
 
-
 # Libraries for the data analysis
 import pandas as pd
 import re
@@ -32,11 +31,12 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 polish_stopwords = open("/Users/julkakubisa/PycharmProjects/telegram-analysis/data/polish.stopwords.txt",
                         "r").read().replace("\n'", " ").split()
 
+
 # Reads and prepares data
 def prepare_data(data):
     data = pd.read_json(data, orient='split')
     data = pd.json_normalize(data['messages'])
-    data = data.filter(['text','from', 'media_type', 'date'], axis=1)       # Leave only important columns
+    data = data.filter(['text', 'from', 'media_type', 'date'], axis=1)  # Leave only important columns
 
     # Index messages by datetime
     data["datetime"] = pd.to_datetime(data['date'])
@@ -48,12 +48,13 @@ def prepare_data(data):
     data = data.dropna()
     return data
 
+
 # Extract emojis from messages
 def extract_emojis(row):
     message = row.text
     if message is None or type(message) != str:
         return None
-    return ''.join(c for c in message if c in emoji.UNICODE_EMOJI['en'])        # Returns emojis that appeared in message
+    return ''.join(c for c in message if c in emoji.UNICODE_EMOJI['en'])  # Returns emojis that appeared in message
 
 
 # Prepares text for further analysis
@@ -69,17 +70,20 @@ def prepare_text(data):
                     .str.decode('utf-8'))
     return data
 
+
 # Gets the number of word per message
 def word_count(row):
     message = row.text
     if message is None or type(message) != str:
         return None
-    return re.sub("\W", " ", message).split().__len__()     # Splits by whole words that aren't [A-Za-z0-9_]
+    return re.sub("\W", " ", message).split().__len__()  # Splits by whole words that aren't [A-Za-z0-9_]
+
 
 # Creates a list for naming days of the week
 def week_name(i):
     l = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     return l[i]
+
 
 # Tokenize function
 def tokenize(text):
@@ -87,6 +91,7 @@ def tokenize(text):
     tokens_processed = [j for j in text_tokens if j not in polish_stopwords and len(j) > 1]
     text = " ".join(tokens_processed)
     return text
+
 
 ### DASH LAYOUT
 header = dbc.Row([
@@ -98,23 +103,17 @@ header = dbc.Row([
         id='upload-data',
     ),
     dcc.Store(id='store'),
-    # html.Div([
-    #     dcc.DatePickerRange(
-    #         id="date-range",
-    #         # min_date_allowed=filtered_data.datetime.min().date(),
-    #         # max_date_allowed=filtered_data.datetime.max().date(),
-    #         # start_date=filtered_data.datetime.min().date(),
-    #         # end_date=filtered_data.datetime.max().date(),
-    #         minimum_nights=30,  # TODO monthly distribution error
-    #         display_format='DD/MM/YYYY',
-    #     ),
-    # ],
-    #     className="date-picker"
-    # ),
 ],
     className="header"
 )
 
+calendar = dbc.Row([
+    html.Div(id='calendar',
+             className="date-picker"
+
+             ),
+],
+)
 
 statistics = dbc.Row(
     [
@@ -138,7 +137,6 @@ statistics = dbc.Row(
     className="stats"
 )
 
-
 timeline = dbc.Row([
     html.Div([
         html.I(className="bi bi-star-fill"), " Chat timeline",
@@ -148,7 +146,6 @@ timeline = dbc.Row([
     dcc.Graph(id="timeline_graph")
 ],
 )
-
 
 body = dbc.Row(
     [
@@ -239,13 +236,12 @@ body = dbc.Row(
     Output('store', 'data'),
     Input('upload-data', 'contents'),
     prevent_initial_call=True)
-
 def update_output(contents):
     content_string = contents.split(',')
 
     decoded = base64.b64decode(content_string[1])
     try:
-            df = pd.read_json(io.BytesIO(decoded))
+        df = pd.read_json(io.BytesIO(decoded))
     except Exception as e:
         print(e)
         return html.Div([
@@ -255,6 +251,31 @@ def update_output(contents):
     return df
 
 
+# Create a datepicker
+@app.callback(
+    Output('calendar', 'children'),
+    Input('store', 'data')
+)
+def change(data):
+    if data is None:
+        raise PreventUpdate
+
+    # Upload and define data
+    data = prepare_data(data)
+
+    date_picker = dcc.DatePickerRange(
+        id="date-range",
+        min_date_allowed=data.datetime.min().date(),
+        max_date_allowed=data.datetime.max().date(),
+        start_date=data.datetime.min().date(),
+        end_date=data.datetime.max().date(),
+        minimum_nights=30,  # TODO monthly distribution error
+        display_format='DD/MM/YYYY')
+
+    return date_picker
+
+
+# Update stats
 @app.callback(
     [Output("tot_mess", "children"), Output("avg_mess", "children"), Output("avg_words", "children"),
      Output("exact_day", "children"), Output("mess_distr", "figure"), Output("hour_distr", "figure"),
@@ -271,8 +292,14 @@ def update_states(data):
     if data is None:
         raise PreventUpdate
 
-    # Upload and define data
     data = prepare_data(data)
+
+    # mask = (        # Range of dates for creating graphs
+    #         (data.datetime >= start_date)
+    #         & (data.datetime <= end_date)
+    # )
+    #
+    # data = data.loc[mask, :]       # Data filtered depending on chosen range
 
     # Emojis
     data["emojis"] = data[["text"]].apply(extract_emojis, axis=1)
@@ -289,26 +316,17 @@ def update_states(data):
     # Prepare text
     data = prepare_text(data)
 
-    #
-    # mask = (        # Range of dates for creating graphs
-    #         (data.datetime >= start_date)
-    #         & (data.datetime <= end_date)
-    # )
-    #
-
-    # filtered_data = data.loc[mask, :]       # Data filtered depending on chosen range
-
     # Group messages by days
     date_df = data.resample("D").apply({'text': 'count'})
     date_df.reset_index(inplace=True)
 
     # Group messages by months
-    date_df_m = data.resample("M").apply({'text': 'count'})        # Messages counted by months
+    date_df_m = data.resample("M").apply({'text': 'count'})  # Messages counted by months
     date_df_m.reset_index(inplace=True)
 
     # Count messages by each author
     who_sent = data[['text', 'from']].groupby(['from']).count().sort_values(['text'],
-                                                                                     ascending=False).reset_index()
+                                                                            ascending=False).reset_index()
 
     # Apply number of words for each message
     data['word_count'] = data[['text']].apply(word_count, axis=1)
@@ -316,20 +334,20 @@ def update_states(data):
     # Count messages by each hour
     data['hour'] = pd.to_datetime(data['datetime'], format='%H:%M').dt.hour
     hourly_distr = data[['text', 'hour']].groupby(['hour']).count().sort_values(['hour'],
-                                                                                         ascending=True).reset_index()
+                                                                                ascending=True).reset_index()
 
     # Basic statistics
-    tot_mess = data['text'].count()        # Count the total number of messages
-    sum_days = len(date_df.index)       # Count the number of appearances by days
-    avg_mess = round(tot_mess / sum_days, 2)        # Average messages by day
-    avg_words = round(sum(data['word_count'])/len(data.index), 2)  # Average words per message
+    tot_mess = data['text'].count()  # Count the total number of messages
+    sum_days = len(date_df.index)  # Count the number of appearances by days
+    avg_mess = round(tot_mess / sum_days, 2)  # Average messages by day
+    avg_words = round(sum(data['word_count']) / len(data.index), 2)  # Average words per message
     day = date_df.max()
-    exact_day = day[0].strftime("%d/%m/%Y")     # Exact day with the most messages
+    exact_day = day[0].strftime("%d/%m/%Y")  # Exact day with the most messages
 
     # Messages distribution chart
     mess_distr = px.pie(who_sent, values='text', names='from',
-                  color_discrete_sequence=px.colors.sequential.Magenta, labels={'text': 'no. of texts'},
-                  )
+                        color_discrete_sequence=px.colors.sequential.Magenta, labels={'text': 'no. of texts'},
+                        )
 
     mess_distr.update_layout(
         showlegend=False,
@@ -340,11 +358,11 @@ def update_states(data):
 
     # Hourly distribution chart
     hour_distr = px.bar(hourly_distr, x='hour', y='text',
-                  labels={'text': 'messages'}, template="plotly_white", color='text',
-                  color_continuous_scale=px.colors.sequential.Magenta)
+                        labels={'text': 'messages'}, template="plotly_white", color='text',
+                        color_continuous_scale=px.colors.sequential.Magenta)
 
     hour_distr.update_layout(title={'x': 0.5},
-                       margin=dict(b=60, r=30, t=80))
+                             margin=dict(b=60, r=30, t=80))
 
     # Monthly distribution chart
     monthly_distr = px.area(date_df_m, x="datetime", y="text",
@@ -358,13 +376,13 @@ def update_states(data):
 
     # Timeline chart
     timeline_graph = px.line(date_df, x="datetime", y="text",
-                                 color_discrete_sequence=px.colors.sequential.Magenta,
-                                 labels={"datetime": "date", "text": "messages"},
-                                 template="plotly_white")
+                             color_discrete_sequence=px.colors.sequential.Magenta,
+                             labels={"datetime": "date", "text": "messages"},
+                             template="plotly_white")
 
     timeline_graph.update_layout(title={'x': 0.5},
-                                     margin_b=60,
-                                     margin_r=30, )
+                                 margin_b=60,
+                                 margin_r=30, )
 
     # Weekly distribution
     data['day_week_num'] = pd.to_datetime(data['datetime'], format='%H:%M').dt.dayofweek  # Extracts the day of the week
@@ -373,11 +391,11 @@ def update_states(data):
 
     # Weekly distribution chart
     week_distr = px.bar_polar(week, r="text", theta="day_week_num",
-                        color="text", template="plotly_white", labels={'text': 'messages'},
-                        color_continuous_scale=px.colors.sequential.Magenta)
+                              color="text", template="plotly_white", labels={'text': 'messages'},
+                              color_continuous_scale=px.colors.sequential.Magenta)
 
     week_distr.update_layout(title={'x': 0.5},
-                       margin=dict(b=60, r=30, t=80), polar=dict(radialaxis_showticklabels=False))
+                             margin=dict(b=60, r=30, t=80), polar=dict(radialaxis_showticklabels=False))
 
     # Ngrams chart
     df2 = data[['text', 'from']]
@@ -434,19 +452,20 @@ def update_states(data):
     fig_ngrams.for_each_yaxis(lambda x: x.update(showgrid=False))
     fig_ngrams.update_traces(textfont_size=8)
 
-    #Media type
+    # Media type
     datatype = data[['media_type', 'datetime']].groupby(['media_type']).count().sort_values(['datetime'],
-                                                                                                     ascending=False).reset_index()
+                                                                                            ascending=False).reset_index()
     datatype = datatype.rename(columns={'media_type': 'media type', 'datetime': 'no. messsages'})
     table = dbc.Table.from_dataframe(datatype, hover=True, className="table-style", index=False)
 
-    return tot_mess, avg_mess, avg_words, exact_day, mess_distr, hour_distr,\
+    return tot_mess, avg_mess, avg_words, exact_day, mess_distr, hour_distr, \
            monthly_distr, timeline_graph, week_distr, fig_ngrams, table, fig_emoji
 
+
 # Create a layout
-app.layout = dbc.Container(fluid=True, children=[header, statistics, timeline, body],
+app.layout = dbc.Container(fluid=True, children=[header, calendar, statistics, timeline, body],
                            style={'background-color': '#FFFFFF'}
-)
+                           )
 
 # Run the app
 if __name__ == '__main__':

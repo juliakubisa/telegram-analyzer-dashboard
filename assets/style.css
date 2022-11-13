@@ -150,6 +150,7 @@ border-color: white;
 
 .date-picker {
 text-align: center;
+margin: -90px auto 0 auto;
 }
 
 .DateRangePickerInput_arrow_svg {
